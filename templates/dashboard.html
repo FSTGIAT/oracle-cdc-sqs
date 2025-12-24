@@ -455,17 +455,21 @@
                 const calls = await fetch(`${API_BASE}/api/category/calls?category=${encodeURIComponent(category)}&days=${days}`).then(r => r.json());
                 document.getElementById('categoryCallCount').textContent = calls.length;
 
-                document.getElementById('categoryCallsBody').innerHTML = calls.map(c => `
-                    <tr class="call-row" onclick="showCallDetails('${c.call_id}')">
-                        <td><code class="text-primary">${c.call_id || '-'}</code></td>
+                document.getElementById('categoryCallsBody').innerHTML = calls.map(c => {
+                    const callId = escapeHtml(String(c.call_id || ''));
+                    const summary = c.summary ? String(c.summary) : '';
+                    return `
+                    <tr class="call-row" onclick="showCallDetails('${callId}')">
+                        <td><code class="text-primary">${callId || '-'}</code></td>
                         <td><span class="badge ${c.type === 'CALL' ? 'bg-primary' : 'bg-success'}">${c.type || '-'}</span></td>
                         <td>${c.created || '-'}</td>
                         <td>${getSentimentBadge(c.sentiment)}</td>
                         <td>${c.satisfaction || '-'}</td>
                         <td>${getChurnBadge(c.churn_score)}</td>
-                        <td class="summary-preview" title="${escapeHtml(c.summary || '')}">${(c.summary || '').substring(0, 60)}...</td>
+                        <td class="summary-preview" title="${escapeHtml(summary)}">${summary.substring(0, 60)}...</td>
                     </tr>
-                `).join('');
+                    `;
+                }).join('');
 
                 document.getElementById('categoryCallsLoading').style.display = 'none';
                 document.getElementById('categoryCallsTable').style.display = 'table';
@@ -637,7 +641,7 @@
         }
 
         function getSentimentBadge(sentiment) {
-            if (!sentiment) return '<span class="badge bg-secondary">-</span>';
+            if (!sentiment || typeof sentiment !== 'string') return '<span class="badge bg-secondary">-</span>';
             const s = sentiment.toLowerCase();
             if (s.includes('חיובי') || s.includes('positive')) return '<span class="badge bg-success">+</span>';
             if (s.includes('שלילי') || s.includes('negative')) return '<span class="badge bg-danger">-</span>';
