@@ -20,6 +20,92 @@
         .refresh-indicator { color: #6c757d; font-size: 0.8rem; }
         .error-row { font-size: 0.8rem; }
         .summary-preview { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* Category drill-down styles */
+        .clickable-chart { cursor: pointer; }
+        .call-row { cursor: pointer; transition: background-color 0.2s; }
+        .call-row:hover { background-color: #e3f2fd; }
+
+        /* Conversation styles */
+        .conversation-container {
+            max-height: 500px;
+            overflow-y: auto;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .message {
+            margin-bottom: 12px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 85%;
+            position: relative;
+        }
+        .message-agent {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+        .message-customer {
+            background: #fff;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            margin-right: auto;
+            border-bottom-left-radius: 4px;
+        }
+        .message-other {
+            background: #fff3cd;
+            color: #856404;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .message-header {
+            font-size: 0.75rem;
+            margin-bottom: 4px;
+            opacity: 0.8;
+        }
+        .message-agent .message-header { color: rgba(255,255,255,0.9); }
+        .message-customer .message-header { color: #6c757d; }
+        .message-text {
+            font-size: 0.95rem;
+            line-height: 1.5;
+            direction: rtl;
+            text-align: right;
+        }
+        .speaker-label {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .speaker-agent { background: rgba(255,255,255,0.2); }
+        .speaker-customer { background: #e3f2fd; color: #1565c0; }
+
+        /* Call details panel */
+        .call-details-panel {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+        .detail-item { margin-bottom: 10px; }
+        .detail-label { font-weight: 600; color: #6c757d; font-size: 0.85rem; }
+        .detail-value { color: #333; }
+
+        /* Modal sizing */
+        .modal-xl-custom { max-width: 90%; }
+
+        /* Category calls table */
+        .category-calls-table { font-size: 0.85rem; }
+        .category-calls-table th {
+            background: #f8f9fa;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
@@ -114,7 +200,10 @@
         <div class="row mb-4">
             <div class="col-12">
                 <div class="card">
-                    <div class="card-header">Top 15 Categories</div>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Top 15 Categories</span>
+                        <small class="text-muted">Click a bar to view calls</small>
+                    </div>
                     <div class="card-body">
                         <div style="height: 300px;">
                             <canvas id="categoriesChart"></canvas>
@@ -170,9 +259,138 @@
         </div>
     </div>
 
+    <!-- Category Calls Modal -->
+    <div class="modal fade" id="categoryModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-xl-custom">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <span id="categoryModalTitle">Category Calls</span>
+                        <span class="badge bg-light text-primary ms-2" id="categoryCallCount">0</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                    <div id="categoryCallsLoading" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2">Loading calls...</p>
+                    </div>
+                    <table class="table table-hover category-calls-table" id="categoryCallsTable" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Call ID</th>
+                                <th>Type</th>
+                                <th>Created</th>
+                                <th>Sentiment</th>
+                                <th>Sat.</th>
+                                <th>Churn</th>
+                                <th>Summary</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categoryCallsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Call Details Modal -->
+    <div class="modal fade" id="callModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-xl-custom">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">
+                        <span>Call Details: </span>
+                        <span id="callModalId" class="text-info">-</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="callDetailsLoading" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2">Loading call details...</p>
+                    </div>
+                    <div id="callDetailsContent" style="display: none;">
+                        <!-- Call Summary Panel -->
+                        <div class="call-details-panel border">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="detail-item">
+                                        <div class="detail-label">Summary</div>
+                                        <div class="detail-value" id="callSummary">-</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="row">
+                                        <div class="col-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label">Sentiment</div>
+                                                <div class="detail-value" id="callSentiment">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label">Satisfaction</div>
+                                                <div class="detail-value" id="callSatisfaction">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label">Churn Score</div>
+                                                <div class="detail-value" id="callChurn">-</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-2">
+                                        <div class="col-6">
+                                            <div class="detail-item">
+                                                <div class="detail-label">Products</div>
+                                                <div class="detail-value" id="callProducts">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="detail-item">
+                                                <div class="detail-label">Categories</div>
+                                                <div class="detail-value" id="callCategories">-</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="detail-item mt-2">
+                                        <div class="detail-label">Action Items</div>
+                                        <div class="detail-value" id="callActionItems">-</div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="detail-label">Unresolved Issues</div>
+                                        <div class="detail-value" id="callUnresolved">-</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Conversation Panel -->
+                        <div class="mt-3">
+                            <h6 class="mb-3">
+                                <span class="text-primary">Conversation</span>
+                                <span class="badge bg-secondary ms-2" id="messageCount">0 messages</span>
+                            </h6>
+                            <div class="conversation-container" id="conversationContainer">
+                                <div class="text-center text-muted py-4">Loading conversation...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let sentimentChart, churnChart, satisfactionChart, categoriesChart;
+        let categoryLabels = [];
         const API_BASE = '';
+
+        // Bootstrap modals
+        let categoryModal, callModal;
 
         // Initialize charts
         function initCharts() {
@@ -207,9 +425,139 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     indexAxis: 'y',
-                    plugins: { legend: { display: false } }
+                    plugins: { legend: { display: false } },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const category = categoryLabels[index];
+                            if (category) {
+                                showCategoryCalls(category);
+                            }
+                        }
+                    },
+                    onHover: (event, elements) => {
+                        event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                    }
                 }
             });
+        }
+
+        // Show calls for a category
+        async function showCategoryCalls(category) {
+            const days = document.getElementById('timeFilter').value;
+            document.getElementById('categoryModalTitle').textContent = `Category: ${category}`;
+            document.getElementById('categoryCallsLoading').style.display = 'block';
+            document.getElementById('categoryCallsTable').style.display = 'none';
+
+            categoryModal.show();
+
+            try {
+                const calls = await fetch(`${API_BASE}/api/category/calls?category=${encodeURIComponent(category)}&days=${days}`).then(r => r.json());
+                document.getElementById('categoryCallCount').textContent = calls.length;
+
+                document.getElementById('categoryCallsBody').innerHTML = calls.map(c => `
+                    <tr class="call-row" onclick="showCallDetails('${c.call_id}')">
+                        <td><code class="text-primary">${c.call_id || '-'}</code></td>
+                        <td><span class="badge ${c.type === 'CALL' ? 'bg-primary' : 'bg-success'}">${c.type || '-'}</span></td>
+                        <td>${c.created || '-'}</td>
+                        <td>${getSentimentBadge(c.sentiment)}</td>
+                        <td>${c.satisfaction || '-'}</td>
+                        <td>${getChurnBadge(c.churn_score)}</td>
+                        <td class="summary-preview" title="${escapeHtml(c.summary || '')}">${(c.summary || '').substring(0, 60)}...</td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('categoryCallsLoading').style.display = 'none';
+                document.getElementById('categoryCallsTable').style.display = 'table';
+            } catch (error) {
+                console.error('Error loading category calls:', error);
+                document.getElementById('categoryCallsBody').innerHTML = `
+                    <tr><td colspan="7" class="text-center text-danger">Error loading calls</td></tr>
+                `;
+                document.getElementById('categoryCallsLoading').style.display = 'none';
+                document.getElementById('categoryCallsTable').style.display = 'table';
+            }
+        }
+
+        // Show call details with conversation
+        async function showCallDetails(callId) {
+            document.getElementById('callModalId').textContent = callId;
+            document.getElementById('callDetailsLoading').style.display = 'block';
+            document.getElementById('callDetailsContent').style.display = 'none';
+
+            callModal.show();
+
+            try {
+                // Fetch call details and conversation in parallel
+                const [details, conversation] = await Promise.all([
+                    fetch(`${API_BASE}/api/call/${callId}`).then(r => r.json()),
+                    fetch(`${API_BASE}/api/call/${callId}/conversation`).then(r => r.json())
+                ]);
+
+                // Populate details
+                document.getElementById('callSummary').textContent = details.summary || '-';
+                document.getElementById('callSentiment').innerHTML = getSentimentBadge(details.sentiment);
+                document.getElementById('callSatisfaction').textContent = details.satisfaction || '-';
+                document.getElementById('callChurn').innerHTML = getChurnBadge(details.churn_score);
+                document.getElementById('callProducts').textContent = details.products || '-';
+                document.getElementById('callActionItems').textContent = details.action_items || '-';
+                document.getElementById('callUnresolved').textContent = details.unresolved_issues || '-';
+                document.getElementById('callCategories').innerHTML = (details.categories || [])
+                    .map(c => `<span class="badge bg-info me-1">${c}</span>`).join('') || '-';
+
+                // Populate conversation
+                document.getElementById('messageCount').textContent = `${conversation.message_count || 0} messages`;
+                document.getElementById('conversationContainer').innerHTML = renderConversation(conversation.messages || []);
+
+                document.getElementById('callDetailsLoading').style.display = 'none';
+                document.getElementById('callDetailsContent').style.display = 'block';
+
+            } catch (error) {
+                console.error('Error loading call details:', error);
+                document.getElementById('callDetailsLoading').innerHTML = `
+                    <div class="text-danger">Error loading call details: ${error.message}</div>
+                `;
+            }
+        }
+
+        // Render conversation messages
+        function renderConversation(messages) {
+            if (!messages || messages.length === 0) {
+                return '<div class="text-center text-muted py-4">No conversation data available</div>';
+            }
+
+            return messages.map(msg => {
+                const isAgent = msg.speaker_class === 'agent';
+                const isCustomer = msg.speaker_class === 'customer';
+                const messageClass = isAgent ? 'message-agent' : (isCustomer ? 'message-customer' : 'message-other');
+                const speakerClass = isAgent ? 'speaker-agent' : 'speaker-customer';
+
+                return `
+                    <div class="message ${messageClass}">
+                        <div class="message-header">
+                            <span class="speaker-label ${speakerClass}">${msg.speaker_label || msg.speaker || 'Unknown'}</span>
+                            <span class="ms-2">${msg.timestamp || ''}</span>
+                        </div>
+                        <div class="message-text">${escapeHtml(msg.text || '')}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Helper: Get churn risk badge
+        function getChurnBadge(score) {
+            if (score === null || score === undefined) return '<span class="badge bg-secondary">-</span>';
+            const numScore = parseFloat(score);
+            if (numScore >= 70) return `<span class="badge bg-danger">${numScore}</span>`;
+            if (numScore >= 40) return `<span class="badge bg-warning text-dark">${numScore}</span>`;
+            return `<span class="badge bg-success">${numScore}</span>`;
+        }
+
+        // Helper: Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         // Fetch and update data
@@ -250,7 +598,8 @@
 
                 // Categories Chart
                 const categories = await fetch(`${API_BASE}/api/categories?days=${days}`).then(r => r.json());
-                categoriesChart.data.labels = categories.map(c => c.category || 'Unknown');
+                categoryLabels = categories.map(c => c.category || 'Unknown');
+                categoriesChart.data.labels = categoryLabels;
                 categoriesChart.data.datasets[0].data = categories.map(c => c.count);
                 categoriesChart.update();
 
@@ -297,6 +646,10 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            // Initialize Bootstrap modals
+            categoryModal = new bootstrap.Modal(document.getElementById('categoryModal'));
+            callModal = new bootstrap.Modal(document.getElementById('callModal'));
+
             initCharts();
             fetchData();
 

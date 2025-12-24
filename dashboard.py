@@ -250,6 +250,106 @@ def api_daily():
     return jsonify(results)
 
 
+@app.route('/api/category/calls')
+def api_category_calls():
+    """Get calls for a specific category"""
+    category = request.args.get('category', '')
+    days = request.args.get('days', 7, type=int)
+    limit = request.args.get('limit', 50, type=int)
+
+    query = """
+        SELECT
+            cc.SOURCE_ID as call_id,
+            cc.SOURCE_TYPE as type,
+            TO_CHAR(cc.CREATION_DATE, 'YYYY-MM-DD HH24:MI') as created,
+            cs.SUMMARY as summary,
+            cs.SENTIMENT as sentiment,
+            cs.SATISFACTION as satisfaction,
+            ROUND(cs.CHURN_SCORE, 1) as churn_score,
+            cs.PRODUCTS as products,
+            cs.ACTION_ITEMS as action_items
+        FROM CONVERSATION_CATEGORY cc
+        LEFT JOIN CONVERSATION_SUMMARY cs ON cc.SOURCE_ID = cs.SOURCE_ID AND cc.SOURCE_TYPE = cs.SOURCE_TYPE
+        WHERE cc.CATEGORY_CODE = :category
+        AND cc.CREATION_DATE > SYSDATE - :days
+        ORDER BY cc.CREATION_DATE DESC
+        FETCH FIRST :limit ROWS ONLY
+    """
+
+    results = execute_query(query, {'category': category, 'days': days, 'limit': limit})
+    return jsonify(results)
+
+
+@app.route('/api/call/<call_id>')
+def api_call_details(call_id):
+    """Get call details from CONVERSATION_SUMMARY"""
+    query = """
+        SELECT
+            SOURCE_ID as call_id,
+            SOURCE_TYPE as type,
+            TO_CHAR(CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') as created,
+            SUMMARY as summary,
+            SENTIMENT as sentiment,
+            SATISFACTION as satisfaction,
+            ROUND(CHURN_SCORE, 1) as churn_score,
+            PRODUCTS as products,
+            ACTION_ITEMS as action_items,
+            UNRESOLVED_ISSUES as unresolved_issues,
+            BAN as ban,
+            SUBSCRIBER_NO as subscriber_no
+        FROM CONVERSATION_SUMMARY
+        WHERE SOURCE_ID = :call_id
+    """
+
+    result = execute_single(query, {'call_id': call_id})
+
+    # Get categories for this call
+    cat_query = """
+        SELECT CATEGORY_CODE as category
+        FROM CONVERSATION_CATEGORY
+        WHERE SOURCE_ID = :call_id
+    """
+    categories = execute_query(cat_query, {'call_id': call_id})
+    result['categories'] = [c['category'] for c in categories]
+
+    return jsonify(result)
+
+
+@app.route('/api/call/<call_id>/conversation')
+def api_call_conversation(call_id):
+    """Get full conversation from VERINT_TEXT_ANALYSIS"""
+    query = """
+        SELECT
+            CALL_ID as call_id,
+            OWNER as speaker,
+            TO_CHAR(CALL_TIME, 'YYYY-MM-DD HH24:MI:SS') as timestamp,
+            DBMS_LOB.SUBSTR(TEXT, 4000, 1) as text
+        FROM VERINT_TEXT_ANALYSIS
+        WHERE CALL_ID = :call_id
+        ORDER BY CALL_TIME ASC
+    """
+
+    results = execute_query(query, {'call_id': call_id})
+
+    # Format speaker labels
+    for msg in results:
+        if msg.get('speaker') == 'A':
+            msg['speaker_label'] = 'Agent'
+            msg['speaker_class'] = 'agent'
+        elif msg.get('speaker') == 'C':
+            msg['speaker_label'] = 'Customer'
+            msg['speaker_class'] = 'customer'
+        else:
+            msg['speaker_label'] = msg.get('speaker', 'Unknown')
+            msg['speaker_class'] = 'other'
+
+    return jsonify({
+        'call_id': call_id,
+        'message_count': len(results),
+        'messages': results
+    })
+
+
 @app.route('/api/health')
 def api_health():
     """Health check endpoint"""
