@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDC Analytics Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        body { background-color: #f8f9fa; }
+        .card { box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075); margin-bottom: 1rem; }
+        .card-header { background-color: #fff; border-bottom: 2px solid #e9ecef; font-weight: 600; }
+        .stat-value { font-size: 2rem; font-weight: 700; color: #495057; }
+        .stat-label { font-size: 0.875rem; color: #6c757d; }
+        .table-sm td, .table-sm th { padding: 0.4rem; font-size: 0.85rem; }
+        .badge-positive { background-color: #28a745; }
+        .badge-negative { background-color: #dc3545; }
+        .badge-neutral { background-color: #6c757d; }
+        .chart-container { position: relative; height: 250px; }
+        .refresh-indicator { color: #6c757d; font-size: 0.8rem; }
+        .error-row { font-size: 0.8rem; }
+        .summary-preview { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-primary mb-4">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">CDC Analytics Dashboard</span>
+            <div class="d-flex align-items-center">
+                <select id="timeFilter" class="form-select form-select-sm me-3" style="width: auto;">
+                    <option value="1">Last 24 Hours</option>
+                    <option value="7" selected>Last 7 Days</option>
+                    <option value="30">Last 30 Days</option>
+                    <option value="90">Last 90 Days</option>
+                </select>
+                <span class="refresh-indicator text-white" id="lastUpdate">Loading...</span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <!-- Summary Cards Row -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="stat-value" id="totalConversations">-</div>
+                        <div class="stat-label">Total Conversations</div>
+                        <small class="text-muted"><span id="callCount">-</span> Calls | <span id="whatsappCount">-</span> WhatsApp</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="stat-value text-primary" id="avgSatisfaction">-</div>
+                        <div class="stat-label">Avg Satisfaction (1-5)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="stat-value text-warning" id="avgChurn">-</div>
+                        <div class="stat-label">Avg Churn Score (0-100)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="stat-value text-success" id="positivePercent">-</div>
+                        <div class="stat-label">Positive Sentiment %</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">Sentiment Distribution</div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="sentimentChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">Churn Risk Distribution</div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="churnChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">Satisfaction Distribution</div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="satisfactionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Categories Chart -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">Top 15 Categories</div>
+                    <div class="card-body">
+                        <div style="height: 300px;">
+                            <canvas id="categoriesChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tables Row -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        Recent Errors
+                        <span class="badge bg-danger" id="errorCount">0</span>
+                    </div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Type</th>
+                                    <th>Call ID</th>
+                                    <th>Message</th>
+                                </tr>
+                            </thead>
+                            <tbody id="errorsTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">Recent Conversations</div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Type</th>
+                                    <th>Sentiment</th>
+                                    <th>Sat.</th>
+                                    <th>Churn</th>
+                                    <th>Summary</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sentimentChart, churnChart, satisfactionChart, categoriesChart;
+        const API_BASE = '';
+
+        // Initialize charts
+        function initCharts() {
+            const pieOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
+            };
+
+            sentimentChart = new Chart(document.getElementById('sentimentChart'), {
+                type: 'doughnut',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: ['#28a745', '#dc3545', '#6c757d'] }] },
+                options: pieOptions
+            });
+
+            churnChart = new Chart(document.getElementById('churnChart'), {
+                type: 'doughnut',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: ['#dc3545', '#ffc107', '#28a745'] }] },
+                options: pieOptions
+            });
+
+            satisfactionChart = new Chart(document.getElementById('satisfactionChart'), {
+                type: 'bar',
+                data: { labels: ['1', '2', '3', '4', '5'], datasets: [{ label: 'Count', data: [], backgroundColor: '#0d6efd' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            categoriesChart = new Chart(document.getElementById('categoriesChart'), {
+                type: 'bar',
+                data: { labels: [], datasets: [{ label: 'Count', data: [], backgroundColor: '#0d6efd' }] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // Fetch and update data
+        async function fetchData() {
+            const days = document.getElementById('timeFilter').value;
+
+            try {
+                // Summary
+                const summary = await fetch(`${API_BASE}/api/summary?days=${days}`).then(r => r.json());
+                document.getElementById('totalConversations').textContent = summary.total || 0;
+                document.getElementById('callCount').textContent = summary.calls || 0;
+                document.getElementById('whatsappCount').textContent = summary.whatsapp || 0;
+                document.getElementById('avgSatisfaction').textContent = summary.avg_satisfaction?.toFixed(1) || '-';
+                document.getElementById('avgChurn').textContent = summary.avg_churn_score?.toFixed(1) || '-';
+
+                const total = (summary.positive || 0) + (summary.negative || 0) + (summary.neutral || 0);
+                const posPercent = total > 0 ? ((summary.positive / total) * 100).toFixed(1) : 0;
+                document.getElementById('positivePercent').textContent = posPercent + '%';
+
+                // Sentiment Chart
+                const sentiment = await fetch(`${API_BASE}/api/sentiment?days=${days}`).then(r => r.json());
+                sentimentChart.data.labels = sentiment.map(s => s.sentiment);
+                sentimentChart.data.datasets[0].data = sentiment.map(s => s.count);
+                sentimentChart.update();
+
+                // Churn Chart
+                const churn = await fetch(`${API_BASE}/api/churn?days=${days}`).then(r => r.json());
+                churnChart.data.labels = churn.map(c => c.risk_level);
+                churnChart.data.datasets[0].data = churn.map(c => c.count);
+                churnChart.update();
+
+                // Satisfaction Chart
+                const satisfaction = await fetch(`${API_BASE}/api/satisfaction?days=${days}`).then(r => r.json());
+                const satData = [0, 0, 0, 0, 0];
+                satisfaction.forEach(s => { if (s.rating >= 1 && s.rating <= 5) satData[s.rating - 1] = s.count; });
+                satisfactionChart.data.datasets[0].data = satData;
+                satisfactionChart.update();
+
+                // Categories Chart
+                const categories = await fetch(`${API_BASE}/api/categories?days=${days}`).then(r => r.json());
+                categoriesChart.data.labels = categories.map(c => c.category || 'Unknown');
+                categoriesChart.data.datasets[0].data = categories.map(c => c.count);
+                categoriesChart.update();
+
+                // Errors Table
+                const errors = await fetch(`${API_BASE}/api/errors?days=${days}`).then(r => r.json());
+                document.getElementById('errorCount').textContent = errors.length;
+                document.getElementById('errorsTable').innerHTML = errors.slice(0, 20).map(e => `
+                    <tr class="error-row">
+                        <td>${e.timestamp || '-'}</td>
+                        <td><span class="badge bg-danger">${e.error_type || '-'}</span></td>
+                        <td>${e.call_id || '-'}</td>
+                        <td title="${e.error_message}">${(e.error_message || '').substring(0, 50)}...</td>
+                    </tr>
+                `).join('');
+
+                // Recent Conversations
+                const recent = await fetch(`${API_BASE}/api/recent?days=${days}`).then(r => r.json());
+                document.getElementById('recentTable').innerHTML = recent.map(r => `
+                    <tr>
+                        <td>${r.created || '-'}</td>
+                        <td><span class="badge ${r.type === 'CALL' ? 'bg-primary' : 'bg-success'}">${r.type}</span></td>
+                        <td>${getSentimentBadge(r.sentiment)}</td>
+                        <td>${r.satisfaction || '-'}</td>
+                        <td>${r.churn_score || '-'}</td>
+                        <td class="summary-preview" title="${r.summary}">${(r.summary || '').substring(0, 40)}...</td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('lastUpdate').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                document.getElementById('lastUpdate').textContent = 'Error loading data';
+            }
+        }
+
+        function getSentimentBadge(sentiment) {
+            if (!sentiment) return '<span class="badge bg-secondary">-</span>';
+            const s = sentiment.toLowerCase();
+            if (s.includes('חיובי') || s.includes('positive')) return '<span class="badge bg-success">+</span>';
+            if (s.includes('שלילי') || s.includes('negative')) return '<span class="badge bg-danger">-</span>';
+            return '<span class="badge bg-secondary">~</span>';
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            fetchData();
+
+            // Time filter change
+            document.getElementById('timeFilter').addEventListener('change', fetchData);
+
+            // Auto-refresh every 30 seconds
+            setInterval(fetchData, 30000);
+        });
+    </script>
+</body>
+</html>
