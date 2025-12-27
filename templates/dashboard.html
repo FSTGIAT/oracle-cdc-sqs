@@ -109,7 +109,7 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-dark bg-primary mb-4">
+    <nav class="navbar navbar-dark bg-primary mb-0">
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1">CDC Analytics Dashboard</span>
             <div class="d-flex align-items-center">
@@ -124,7 +124,25 @@
         </div>
     </nav>
 
-    <div class="container-fluid">
+    <!-- Tab Navigation -->
+    <ul class="nav nav-tabs bg-light px-3" id="mainTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="analytics-tab" data-bs-toggle="tab" data-bs-target="#analyticsPane" type="button" role="tab">
+                Analytics
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="mlquality-tab" data-bs-toggle="tab" data-bs-target="#mlQualityPane" type="button" role="tab">
+                ML Quality
+                <span class="badge bg-warning text-dark ms-1" id="pendingBadge" style="display: none;">0</span>
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+    <!-- Analytics Tab Pane -->
+    <div class="tab-pane fade show active" id="analyticsPane" role="tabpanel">
+    <div class="container-fluid mt-4">
         <!-- Summary Cards Row -->
         <div class="row mb-4">
             <div class="col-md-3">
@@ -166,7 +184,10 @@
         <div class="row mb-4">
             <div class="col-md-4">
                 <div class="card">
-                    <div class="card-header">Sentiment Distribution</div>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Sentiment Distribution</span>
+                        <small class="text-muted">Click to drill down</small>
+                    </div>
                     <div class="card-body">
                         <div class="chart-container">
                             <canvas id="sentimentChart"></canvas>
@@ -176,7 +197,10 @@
             </div>
             <div class="col-md-4">
                 <div class="card">
-                    <div class="card-header">Churn Risk Distribution</div>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Churn Risk Distribution</span>
+                        <small class="text-muted">Click to drill down</small>
+                    </div>
                     <div class="card-body">
                         <div class="chart-container">
                             <canvas id="churnChart"></canvas>
@@ -258,6 +282,160 @@
             </div>
         </div>
     </div>
+    </div><!-- End Analytics Tab Pane -->
+
+    <!-- ML Quality Tab Pane -->
+    <div class="tab-pane fade" id="mlQualityPane" role="tabpanel">
+    <div class="container-fluid mt-4">
+        <!-- ML Quality Header -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">ML Evaluation & Improvement System</h4>
+                    <button class="btn btn-primary" id="applyToMlBtn" onclick="applyToML()">
+                        Apply Approved Configs to ML Service
+                    </button>
+                </div>
+                <p class="text-muted mb-0">Monitor ML quality, review recommendations, and provide classification feedback</p>
+            </div>
+        </div>
+
+        <!-- ML Metrics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center border-primary">
+                    <div class="card-body">
+                        <div class="stat-value text-primary" id="mlRecall">-</div>
+                        <div class="stat-label">Churn Recall %</div>
+                        <small class="text-muted">Of churners, how many we flagged</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center border-success">
+                    <div class="card-body">
+                        <div class="stat-value text-success" id="mlCoverage">-</div>
+                        <div class="stat-label">Coverage %</div>
+                        <small class="text-muted">Calls processed by ML</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center border-warning">
+                    <div class="card-body">
+                        <div class="stat-value text-warning" id="mlPending">0</div>
+                        <div class="stat-label">Pending Recommendations</div>
+                        <small class="text-muted">Awaiting human approval</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center border-info">
+                    <div class="card-body">
+                        <div class="stat-value text-info" id="mlFeedbackTotal">-</div>
+                        <div class="stat-label">Feedback Entries</div>
+                        <small class="text-muted" id="mlFeedbackCorrect">- correct / - incorrect</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recommendations & Feedback Row -->
+        <div class="row mb-4">
+            <!-- Pending Recommendations -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center bg-warning bg-opacity-10">
+                        <span>Pending Recommendations</span>
+                        <button class="btn btn-sm btn-outline-primary" onclick="loadMLQualityData()">Refresh</button>
+                    </div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                        <div id="recommendationsLoading" class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="mt-2">Loading recommendations...</p>
+                        </div>
+                        <div id="recommendationsEmpty" class="text-center py-4 text-muted" style="display: none;">
+                            <p class="mb-0">No pending recommendations</p>
+                            <small>Recommendations appear after weekly evaluation runs</small>
+                        </div>
+                        <div id="recommendationsList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Classification Feedback -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-info bg-opacity-10">
+                        Submit Classification Feedback
+                    </div>
+                    <div class="card-body">
+                        <form id="feedbackForm" onsubmit="submitFeedback(event)">
+                            <div class="mb-3">
+                                <label class="form-label">Call ID</label>
+                                <input type="text" class="form-control" id="feedbackCallId" required placeholder="e.g., 12345">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">ML Category (Predicted)</label>
+                                <input type="text" class="form-control" id="feedbackMlCategory" placeholder="What ML classified">
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="feedbackIsCorrect" onchange="toggleCorrectCategory()">
+                                    <label class="form-check-label" for="feedbackIsCorrect">
+                                        ML classification was correct
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="mb-3" id="correctCategoryDiv">
+                                <label class="form-label">Correct Category</label>
+                                <input type="text" class="form-control" id="feedbackCorrectCategory" placeholder="What it should be">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Reviewer Name</label>
+                                <input type="text" class="form-control" id="feedbackReviewer" placeholder="Your name">
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">Submit Feedback</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Evaluation History -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        Evaluation History (Last 90 Days)
+                    </div>
+                    <div class="card-body">
+                        <div style="height: 250px;">
+                            <canvas id="evalHistoryChart"></canvas>
+                        </div>
+                        <div class="table-responsive mt-3" style="max-height: 300px; overflow-y: auto;">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Churned</th>
+                                        <th>With Score</th>
+                                        <th>Recall %</th>
+                                        <th>Coverage %</th>
+                                        <th>Avg Churn Score</th>
+                                        <th>Recs Generated</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="evalHistoryTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div><!-- End ML Quality Tab Pane -->
+    </div><!-- End tab-content -->
 
     <!-- Category Calls Modal -->
     <div class="modal fade" id="categoryModal" tabindex="-1" aria-hidden="true">
@@ -385,9 +563,14 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let sentimentChart, churnChart, satisfactionChart, categoriesChart;
+        let sentimentChart, churnChart, satisfactionChart, categoriesChart, evalHistoryChart;
         let categoryLabels = [];
+        let churnLabels = [];
+        let sentimentLabels = [];
         const API_BASE = '';
+
+        // ML Quality state
+        let mlQualityLoaded = false;
 
         // Bootstrap modals
         let categoryModal, callModal;
@@ -403,13 +586,41 @@
             sentimentChart = new Chart(document.getElementById('sentimentChart'), {
                 type: 'doughnut',
                 data: { labels: [], datasets: [{ data: [], backgroundColor: ['#28a745', '#dc3545', '#6c757d'] }] },
-                options: pieOptions
+                options: {
+                    ...pieOptions,
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const sentiment = sentimentLabels[index];
+                            if (sentiment) {
+                                showSentimentCalls(sentiment);
+                            }
+                        }
+                    },
+                    onHover: (event, elements) => {
+                        event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                    }
+                }
             });
 
             churnChart = new Chart(document.getElementById('churnChart'), {
                 type: 'doughnut',
                 data: { labels: [], datasets: [{ data: [], backgroundColor: ['#dc3545', '#ffc107', '#28a745'] }] },
-                options: pieOptions
+                options: {
+                    ...pieOptions,
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const riskLevel = churnLabels[index];
+                            if (riskLevel) {
+                                showChurnRiskCalls(riskLevel);
+                            }
+                        }
+                    },
+                    onHover: (event, elements) => {
+                        event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                    }
+                }
             });
 
             satisfactionChart = new Chart(document.getElementById('satisfactionChart'), {
@@ -475,6 +686,100 @@
                 document.getElementById('categoryCallsTable').style.display = 'table';
             } catch (error) {
                 console.error('Error loading category calls:', error);
+                document.getElementById('categoryCallsBody').innerHTML = `
+                    <tr><td colspan="7" class="text-center text-danger">Error loading calls</td></tr>
+                `;
+                document.getElementById('categoryCallsLoading').style.display = 'none';
+                document.getElementById('categoryCallsTable').style.display = 'table';
+            }
+        }
+
+        // Show calls for a sentiment type
+        async function showSentimentCalls(sentimentType) {
+            const days = document.getElementById('timeFilter').value;
+
+            // Set sentiment-appropriate styling
+            let badgeClass = 'bg-secondary';
+            if (sentimentType === 'Positive') badgeClass = 'bg-success';
+            else if (sentimentType === 'Negative') badgeClass = 'bg-danger';
+
+            document.getElementById('categoryModalTitle').innerHTML = `<span class="badge ${badgeClass} me-2">Sentiment</span> ${sentimentType}`;
+            document.getElementById('categoryCallsLoading').style.display = 'block';
+            document.getElementById('categoryCallsTable').style.display = 'none';
+
+            categoryModal.show();
+
+            try {
+                const calls = await fetch(`${API_BASE}/api/sentiment/calls?sentiment=${encodeURIComponent(sentimentType)}&days=${days}`).then(r => r.json());
+                document.getElementById('categoryCallCount').textContent = calls.length;
+
+                document.getElementById('categoryCallsBody').innerHTML = calls.map(c => {
+                    const callId = escapeHtml(String(c.call_id || ''));
+                    const summary = c.summary ? String(c.summary) : '';
+                    return `
+                    <tr class="call-row" onclick="showCallDetails('${callId}')">
+                        <td><code class="text-primary">${callId || '-'}</code></td>
+                        <td><span class="badge ${c.type === 'CALL' ? 'bg-primary' : 'bg-success'}">${c.type || '-'}</span></td>
+                        <td>${c.created || '-'}</td>
+                        <td>${getSentimentBadge(c.sentiment)}</td>
+                        <td>${c.satisfaction || '-'}</td>
+                        <td>${getChurnBadge(c.churn_score)}</td>
+                        <td class="summary-preview" title="${escapeHtml(summary)}">${summary.substring(0, 60)}...</td>
+                    </tr>
+                    `;
+                }).join('');
+
+                document.getElementById('categoryCallsLoading').style.display = 'none';
+                document.getElementById('categoryCallsTable').style.display = 'table';
+            } catch (error) {
+                console.error('Error loading sentiment calls:', error);
+                document.getElementById('categoryCallsBody').innerHTML = `
+                    <tr><td colspan="7" class="text-center text-danger">Error loading calls</td></tr>
+                `;
+                document.getElementById('categoryCallsLoading').style.display = 'none';
+                document.getElementById('categoryCallsTable').style.display = 'table';
+            }
+        }
+
+        // Show calls for a churn risk level
+        async function showChurnRiskCalls(riskLevel) {
+            const days = document.getElementById('timeFilter').value;
+
+            // Set risk-appropriate styling
+            let badgeClass = 'bg-success';
+            if (riskLevel.includes('High')) badgeClass = 'bg-danger';
+            else if (riskLevel.includes('Medium')) badgeClass = 'bg-warning text-dark';
+
+            document.getElementById('categoryModalTitle').innerHTML = `<span class="badge ${badgeClass} me-2">Churn Risk</span> ${riskLevel}`;
+            document.getElementById('categoryCallsLoading').style.display = 'block';
+            document.getElementById('categoryCallsTable').style.display = 'none';
+
+            categoryModal.show();
+
+            try {
+                const calls = await fetch(`${API_BASE}/api/churn/calls?risk_level=${encodeURIComponent(riskLevel)}&days=${days}`).then(r => r.json());
+                document.getElementById('categoryCallCount').textContent = calls.length;
+
+                document.getElementById('categoryCallsBody').innerHTML = calls.map(c => {
+                    const callId = escapeHtml(String(c.call_id || ''));
+                    const summary = c.summary ? String(c.summary) : '';
+                    return `
+                    <tr class="call-row" onclick="showCallDetails('${callId}')">
+                        <td><code class="text-primary">${callId || '-'}</code></td>
+                        <td><span class="badge ${c.type === 'CALL' ? 'bg-primary' : 'bg-success'}">${c.type || '-'}</span></td>
+                        <td>${c.created || '-'}</td>
+                        <td>${getSentimentBadge(c.sentiment)}</td>
+                        <td>${c.satisfaction || '-'}</td>
+                        <td>${getChurnBadge(c.churn_score)}</td>
+                        <td class="summary-preview" title="${escapeHtml(summary)}">${summary.substring(0, 60)}...</td>
+                    </tr>
+                    `;
+                }).join('');
+
+                document.getElementById('categoryCallsLoading').style.display = 'none';
+                document.getElementById('categoryCallsTable').style.display = 'table';
+            } catch (error) {
+                console.error('Error loading churn risk calls:', error);
                 document.getElementById('categoryCallsBody').innerHTML = `
                     <tr><td colspan="7" class="text-center text-danger">Error loading calls</td></tr>
                 `;
@@ -581,16 +886,22 @@
                 const posPercent = total > 0 ? ((summary.positive / total) * 100).toFixed(1) : 0;
                 document.getElementById('positivePercent').textContent = posPercent + '%';
 
-                // Sentiment Chart
+                // Sentiment Chart - map colors by sentiment name, not position
                 const sentiment = await fetch(`${API_BASE}/api/sentiment?days=${days}`).then(r => r.json());
-                sentimentChart.data.labels = sentiment.map(s => s.sentiment);
+                const sentimentColorMap = { 'Positive': '#28a745', 'Negative': '#dc3545', 'Neutral': '#6c757d' };
+                sentimentLabels = sentiment.map(s => s.sentiment);
+                sentimentChart.data.labels = sentimentLabels;
                 sentimentChart.data.datasets[0].data = sentiment.map(s => s.count);
+                sentimentChart.data.datasets[0].backgroundColor = sentiment.map(s => sentimentColorMap[s.sentiment] || '#6c757d');
                 sentimentChart.update();
 
-                // Churn Chart
+                // Churn Chart - map colors by risk level, not position
                 const churn = await fetch(`${API_BASE}/api/churn?days=${days}`).then(r => r.json());
-                churnChart.data.labels = churn.map(c => c.risk_level);
+                const churnColorMap = { 'High Risk (70+)': '#dc3545', 'Medium Risk (40-69)': '#ffc107', 'Low Risk (0-39)': '#28a745' };
+                churnLabels = churn.map(c => c.risk_level);
+                churnChart.data.labels = churnLabels;
                 churnChart.data.datasets[0].data = churn.map(c => c.count);
+                churnChart.data.datasets[0].backgroundColor = churn.map(c => churnColorMap[c.risk_level] || '#6c757d');
                 churnChart.update();
 
                 // Satisfaction Chart
@@ -648,6 +959,345 @@
             return '<span class="badge bg-secondary">~</span>';
         }
 
+        // ========================================
+        // ML QUALITY FUNCTIONS
+        // ========================================
+
+        // Initialize ML Quality evaluation history chart
+        function initEvalHistoryChart() {
+            const ctx = document.getElementById('evalHistoryChart');
+            if (!ctx) return;
+
+            evalHistoryChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Recall %',
+                            data: [],
+                            borderColor: '#0d6efd',
+                            backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Coverage %',
+                            data: [],
+                            borderColor: '#198754',
+                            backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: 'Percentage' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load ML Quality data
+        async function loadMLQualityData() {
+            try {
+                // Load metrics, recommendations, and history in parallel
+                const [metrics, recommendations, history] = await Promise.all([
+                    fetch(`${API_BASE}/api/ml-quality/metrics`).then(r => r.json()),
+                    fetch(`${API_BASE}/api/ml-quality/recommendations`).then(r => r.json()),
+                    fetch(`${API_BASE}/api/ml-quality/history`).then(r => r.json())
+                ]);
+
+                // Update metrics cards
+                if (metrics.last_evaluation) {
+                    document.getElementById('mlRecall').textContent =
+                        metrics.last_evaluation.recall_percent ? `${metrics.last_evaluation.recall_percent}%` : '-';
+                    document.getElementById('mlCoverage').textContent =
+                        metrics.last_evaluation.coverage_percent ? `${metrics.last_evaluation.coverage_percent}%` : '-';
+                }
+
+                document.getElementById('mlPending').textContent = metrics.pending_recommendations || 0;
+
+                // Update pending badge in nav
+                const pendingBadge = document.getElementById('pendingBadge');
+                if (metrics.pending_recommendations > 0) {
+                    pendingBadge.textContent = metrics.pending_recommendations;
+                    pendingBadge.style.display = 'inline';
+                } else {
+                    pendingBadge.style.display = 'none';
+                }
+
+                if (metrics.feedback_stats) {
+                    document.getElementById('mlFeedbackTotal').textContent =
+                        metrics.feedback_stats.total_feedback || 0;
+                    document.getElementById('mlFeedbackCorrect').textContent =
+                        `${metrics.feedback_stats.correct_count || 0} correct / ${metrics.feedback_stats.incorrect_count || 0} incorrect`;
+                }
+
+                // Render recommendations
+                renderRecommendations(recommendations);
+
+                // Update history chart and table
+                updateEvalHistory(history);
+
+                mlQualityLoaded = true;
+
+            } catch (error) {
+                console.error('Error loading ML quality data:', error);
+                document.getElementById('recommendationsLoading').innerHTML =
+                    '<div class="text-danger">Error loading data. Check console.</div>';
+            }
+        }
+
+        // Render recommendations list
+        function renderRecommendations(recommendations) {
+            const loading = document.getElementById('recommendationsLoading');
+            const empty = document.getElementById('recommendationsEmpty');
+            const list = document.getElementById('recommendationsList');
+
+            loading.style.display = 'none';
+
+            if (!recommendations || recommendations.length === 0) {
+                empty.style.display = 'block';
+                list.innerHTML = '';
+                return;
+            }
+
+            empty.style.display = 'none';
+
+            list.innerHTML = recommendations.map(rec => {
+                const details = rec.rec_details || {};
+                let detailsHtml = '';
+
+                if (rec.rec_type === 'churn_keywords') {
+                    const keywords = details.keywords || [];
+                    detailsHtml = `
+                        <div class="mb-2">
+                            <strong>New Keywords:</strong>
+                            ${keywords.map(k => `<span class="badge bg-secondary me-1">${escapeHtml(k)}</span>`).join('')}
+                        </div>
+                        <div class="text-muted small">${escapeHtml(details.reason || '')}</div>
+                    `;
+                } else if (rec.rec_type === 'churn_threshold') {
+                    detailsHtml = `
+                        <div class="mb-2">
+                            <strong>Threshold Change:</strong>
+                            ${details.current_value || '?'} → ${details.recommended_value || '?'}
+                        </div>
+                        <div class="text-muted small">${escapeHtml(details.reason || '')}</div>
+                        <div class="text-warning small">${escapeHtml(details.impact || '')}</div>
+                    `;
+                } else if (rec.rec_type === 'classification_fix') {
+                    const misclass = details.misclassifications || [];
+                    detailsHtml = `
+                        <div class="mb-2">
+                            <strong>Misclassifications Found:</strong>
+                            <ul class="mb-0 small">
+                                ${misclass.map(m => `<li>${escapeHtml(m.predicted)} → ${escapeHtml(m.actual)} (${m.count}x)</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="card mb-3 border-warning">
+                        <div class="card-header d-flex justify-content-between align-items-center py-2">
+                            <span>
+                                <span class="badge bg-warning text-dark me-2">${escapeHtml(rec.rec_type)}</span>
+                                <small class="text-muted">${rec.created_at}</small>
+                            </span>
+                            <div>
+                                <button class="btn btn-sm btn-success me-1" onclick="approveRecommendation('${rec.rec_id}')">
+                                    Approve
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="rejectRecommendation('${rec.rec_id}')">
+                                    Reject
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body py-2">
+                            ${detailsHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Update evaluation history chart and table
+        function updateEvalHistory(history) {
+            if (!history || history.length === 0) {
+                document.getElementById('evalHistoryTable').innerHTML =
+                    '<tr><td colspan="7" class="text-center text-muted">No evaluation history yet</td></tr>';
+                return;
+            }
+
+            // Update chart
+            if (evalHistoryChart) {
+                const labels = history.map(h => h.eval_date).reverse();
+                const recallData = history.map(h => h.recall_percent || 0).reverse();
+                const coverageData = history.map(h => h.coverage_percent || 0).reverse();
+
+                evalHistoryChart.data.labels = labels;
+                evalHistoryChart.data.datasets[0].data = recallData;
+                evalHistoryChart.data.datasets[1].data = coverageData;
+                evalHistoryChart.update();
+            }
+
+            // Update table
+            document.getElementById('evalHistoryTable').innerHTML = history.map(h => `
+                <tr>
+                    <td>${h.eval_date || '-'}</td>
+                    <td>${h.churned_count || 0}</td>
+                    <td>${h.with_score_count || 0}</td>
+                    <td><span class="badge ${h.recall_percent >= 70 ? 'bg-success' : h.recall_percent >= 50 ? 'bg-warning' : 'bg-danger'}">${h.recall_percent || 0}%</span></td>
+                    <td><span class="badge ${h.coverage_percent >= 80 ? 'bg-success' : 'bg-warning'}">${h.coverage_percent || 0}%</span></td>
+                    <td>${h.avg_churn_score || '-'}</td>
+                    <td>${h.recommendations_generated || 0}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Approve recommendation
+        async function approveRecommendation(recId) {
+            if (!confirm('Approve this recommendation? Config will be uploaded to S3.')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/ml-quality/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rec_id: recId, approver: 'dashboard_user' })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Approved! Config uploaded to S3. Use "Apply to ML" when ready.');
+                    loadMLQualityData();
+                } else {
+                    alert('Error: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Approve error:', error);
+                alert('Error approving recommendation');
+            }
+        }
+
+        // Reject recommendation
+        async function rejectRecommendation(recId) {
+            const reason = prompt('Reason for rejection (optional):');
+            if (reason === null) return; // Cancelled
+
+            try {
+                const response = await fetch(`${API_BASE}/api/ml-quality/reject`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rec_id: recId, rejected_by: 'dashboard_user', reason: reason })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Recommendation rejected');
+                    loadMLQualityData();
+                } else {
+                    alert('Error: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Reject error:', error);
+                alert('Error rejecting recommendation');
+            }
+        }
+
+        // Apply configs to ML service
+        async function applyToML() {
+            if (!confirm('Send reload signal to ML service? This will apply all approved configs.')) return;
+
+            const btn = document.getElementById('applyToMlBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Sending...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/ml-quality/apply-to-ml`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ triggered_by: 'dashboard_user' })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('SQS message sent. ML service will reload configs shortly.');
+                } else {
+                    alert('Error: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Apply error:', error);
+                alert('Error sending reload signal');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Apply Approved Configs to ML Service';
+            }
+        }
+
+        // Toggle correct category field visibility
+        function toggleCorrectCategory() {
+            const isCorrect = document.getElementById('feedbackIsCorrect').checked;
+            document.getElementById('correctCategoryDiv').style.display = isCorrect ? 'none' : 'block';
+        }
+
+        // Submit classification feedback
+        async function submitFeedback(event) {
+            event.preventDefault();
+
+            const callId = document.getElementById('feedbackCallId').value;
+            const mlCategory = document.getElementById('feedbackMlCategory').value;
+            const isCorrect = document.getElementById('feedbackIsCorrect').checked;
+            const correctCategory = document.getElementById('feedbackCorrectCategory').value;
+            const reviewer = document.getElementById('feedbackReviewer').value;
+
+            if (!callId) {
+                alert('Call ID is required');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/ml-quality/feedback`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        call_id: callId,
+                        ml_category: mlCategory,
+                        correct_category: correctCategory,
+                        is_correct: isCorrect,
+                        reviewer: reviewer || 'anonymous'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Feedback submitted successfully');
+                    document.getElementById('feedbackForm').reset();
+                    loadMLQualityData();
+                } else {
+                    alert('Error: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Feedback error:', error);
+                alert('Error submitting feedback');
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             // Initialize Bootstrap modals
@@ -655,6 +1305,7 @@
             callModal = new bootstrap.Modal(document.getElementById('callModal'));
 
             initCharts();
+            initEvalHistoryChart();
             fetchData();
 
             // Time filter change
@@ -662,6 +1313,25 @@
 
             // Auto-refresh every 30 seconds
             setInterval(fetchData, 30000);
+
+            // Load ML Quality data when tab is shown
+            document.getElementById('mlquality-tab').addEventListener('shown.bs.tab', () => {
+                if (!mlQualityLoaded) {
+                    loadMLQualityData();
+                }
+            });
+
+            // Also check for pending recommendations on page load (for the badge)
+            fetch(`${API_BASE}/api/ml-quality/metrics`)
+                .then(r => r.json())
+                .then(metrics => {
+                    const pendingBadge = document.getElementById('pendingBadge');
+                    if (metrics.pending_recommendations > 0) {
+                        pendingBadge.textContent = metrics.pending_recommendations;
+                        pendingBadge.style.display = 'inline';
+                    }
+                })
+                .catch(() => {}); // Silently fail if ML tables don't exist yet
         });
     </script>
 </body>
