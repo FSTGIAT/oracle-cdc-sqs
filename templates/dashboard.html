@@ -533,6 +533,32 @@
                                             </div>
                                         </div>
                                     </div>
+                                    <!-- Classification Feedback -->
+                                    <div class="row mt-3">
+                                        <div class="col-12">
+                                            <div class="detail-item">
+                                                <div class="detail-label d-flex align-items-center">
+                                                    Was the classification correct?
+                                                    <span id="feedbackStatus" class="ms-2"></span>
+                                                </div>
+                                                <div class="detail-value mt-1">
+                                                    <button class="btn btn-outline-success btn-sm me-2" onclick="quickFeedback(true)" id="btnGood">
+                                                        <span style="font-size: 1.2em;">👍</span> Correct
+                                                    </button>
+                                                    <button class="btn btn-outline-danger btn-sm me-3" onclick="quickFeedback(false)" id="btnBad">
+                                                        <span style="font-size: 1.2em;">👎</span> Wrong
+                                                    </button>
+                                                    <span id="correctCategoryInput" style="display: none;">
+                                                        <input type="text" class="form-control form-control-sm d-inline-block"
+                                                               id="quickCorrectCategory" placeholder="Correct category..."
+                                                               style="width: 200px;">
+                                                        <button class="btn btn-primary btn-sm ms-1" onclick="submitQuickFeedback()">Submit</button>
+                                                        <button class="btn btn-secondary btn-sm ms-1" onclick="cancelQuickFeedback()">Cancel</button>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div class="detail-item mt-2">
                                         <div class="detail-label">Action Items</div>
                                         <div class="detail-value" id="callActionItems">-</div>
@@ -794,6 +820,10 @@
             document.getElementById('callDetailsLoading').style.display = 'block';
             document.getElementById('callDetailsContent').style.display = 'none';
 
+            // Set current call for feedback
+            currentCallIdForFeedback = callId;
+            resetFeedbackUI();
+
             callModal.show();
 
             try {
@@ -811,7 +841,10 @@
                 document.getElementById('callProducts').textContent = details.products || '-';
                 document.getElementById('callActionItems').textContent = details.action_items || '-';
                 document.getElementById('callUnresolved').textContent = details.unresolved_issues || '-';
-                document.getElementById('callCategories').innerHTML = (details.categories || [])
+
+                // Store categories for feedback
+                currentCategoriesForFeedback = details.categories || [];
+                document.getElementById('callCategories').innerHTML = currentCategoriesForFeedback
                     .map(c => `<span class="badge bg-info me-1">${c}</span>`).join('') || '-';
 
                 // Populate conversation
@@ -1296,6 +1329,100 @@
                 console.error('Feedback error:', error);
                 alert('Error submitting feedback');
             }
+        }
+
+        // ========================================
+        // QUICK FEEDBACK FROM CALL DETAILS
+        // ========================================
+
+        let currentCallIdForFeedback = null;
+        let currentCategoriesForFeedback = [];
+
+        // Quick feedback - thumbs up (correct) or thumbs down (wrong)
+        function quickFeedback(isCorrect) {
+            if (!currentCallIdForFeedback) {
+                alert('No call selected');
+                return;
+            }
+
+            if (isCorrect) {
+                // Directly submit as correct
+                submitQuickFeedbackToAPI(true, null);
+            } else {
+                // Show input for correct category
+                document.getElementById('correctCategoryInput').style.display = 'inline';
+                document.getElementById('btnGood').disabled = true;
+                document.getElementById('btnBad').disabled = true;
+                document.getElementById('quickCorrectCategory').focus();
+            }
+        }
+
+        // Cancel quick feedback
+        function cancelQuickFeedback() {
+            document.getElementById('correctCategoryInput').style.display = 'none';
+            document.getElementById('quickCorrectCategory').value = '';
+            document.getElementById('btnGood').disabled = false;
+            document.getElementById('btnBad').disabled = false;
+        }
+
+        // Submit quick feedback with correct category
+        function submitQuickFeedback() {
+            const correctCategory = document.getElementById('quickCorrectCategory').value.trim();
+            if (!correctCategory) {
+                alert('Please enter the correct category');
+                return;
+            }
+            submitQuickFeedbackToAPI(false, correctCategory);
+        }
+
+        // Submit feedback to API
+        async function submitQuickFeedbackToAPI(isCorrect, correctCategory) {
+            const statusEl = document.getElementById('feedbackStatus');
+            statusEl.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/ml-quality/feedback`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        call_id: currentCallIdForFeedback,
+                        ml_category: currentCategoriesForFeedback.join(', '),
+                        correct_category: correctCategory,
+                        is_correct: isCorrect,
+                        reviewer: 'dashboard_user'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    if (isCorrect) {
+                        statusEl.innerHTML = '<span class="badge bg-success">✓ Marked as correct</span>';
+                    } else {
+                        statusEl.innerHTML = `<span class="badge bg-info">✓ Corrected to: ${escapeHtml(correctCategory)}</span>`;
+                    }
+                    // Hide buttons after feedback
+                    document.getElementById('btnGood').style.display = 'none';
+                    document.getElementById('btnBad').style.display = 'none';
+                    document.getElementById('correctCategoryInput').style.display = 'none';
+                } else {
+                    statusEl.innerHTML = '<span class="badge bg-danger">Error saving</span>';
+                }
+            } catch (error) {
+                console.error('Quick feedback error:', error);
+                statusEl.innerHTML = '<span class="badge bg-danger">Error</span>';
+            }
+        }
+
+        // Reset feedback UI when opening new call
+        function resetFeedbackUI() {
+            document.getElementById('feedbackStatus').innerHTML = '';
+            document.getElementById('btnGood').style.display = 'inline-block';
+            document.getElementById('btnBad').style.display = 'inline-block';
+            document.getElementById('btnGood').disabled = false;
+            document.getElementById('btnBad').disabled = false;
+            document.getElementById('correctCategoryInput').style.display = 'none';
+            document.getElementById('quickCorrectCategory').value = '';
         }
 
         // Initialize
