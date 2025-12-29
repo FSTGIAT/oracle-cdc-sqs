@@ -20,10 +20,12 @@ import re
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from collections import Counter
+from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load .env from the same directory as this file
+ENV_PATH = Path(__file__).parent / '.env'
+load_dotenv(ENV_PATH)
 
 # Configure logging
 logging.basicConfig(

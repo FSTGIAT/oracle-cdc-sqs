@@ -8,6 +8,7 @@ import json
 import oracledb
 from flask import Flask, render_template, jsonify, request
 from datetime import datetime
+from pathlib import Path
 from dotenv import load_dotenv
 import boto3
 import logging
@@ -16,8 +17,9 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-load_dotenv()
+# Load .env from the same directory as this file
+ENV_PATH = Path(__file__).parent / '.env'
+load_dotenv(ENV_PATH)
 
 app = Flask(__name__)
 

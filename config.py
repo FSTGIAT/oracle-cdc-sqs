@@ -1,9 +1,12 @@
 import os
 import logging
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from the same directory as this config file
+ENV_PATH = Path(__file__).parent / '.env'
+load_dotenv(ENV_PATH)
 
 # ============================
 # Oracle Configuration
