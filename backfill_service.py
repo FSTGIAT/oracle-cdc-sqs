@@ -38,8 +38,8 @@ sqs_logger = logging.getLogger('sqs')
 class BackfillService:
     """
     Historical backfill for VERINT_TEXT_ANALYSIS
-    Phase 1: Bulk 90-day scan with PARALLEL hint
-    Phase 2: Delta 2-hour queries with INDEX hint
+    Phase 1: ONE-TIME bulk 90-day scan with PARALLEL hint (no batching)
+    Phase 2: Delta 2-hour queries with INDEX hint (batched)
     """
 
     def __init__(self):
@@ -48,9 +48,8 @@ class BackfillService:
 
         # Configuration
         self.days_back = 90
-        self.bulk_batch_size = 100
-        self.delta_batch_size = 50
-        self.min_segments = 11
+        self.delta_batch_size = 50  # Only used for DELTA phase
+        self.min_segments = 16
 
         # State
         self.phase = 'BULK'  # BULK or DELTA
@@ -120,7 +119,7 @@ class BackfillService:
     def collect_bulk_calls(self) -> List[Dict]:
         """
         Phase 1: Full table scan with PARALLEL hint
-        Gets all unprocessed calls from last 90 days
+        ONE-TIME query for all unprocessed calls from last 90 days
         """
         query = """
         SELECT /*+ FULL(VERINT_TEXT_ANALYSIS) PARALLEL(VERINT_TEXT_ANALYSIS, 4) */
@@ -132,23 +131,18 @@ class BackfillService:
             WHERE TEXT_TIME > SYSDATE - :days_back
         )
         ORDER BY CALL_TIME ASC
-        FETCH FIRST :batch_size ROWS ONLY
         """
 
         try:
+            oracle_logger.info(f"[BULK] Executing full 90-day parallel scan (this may take a while)...")
             cursor = self.oracle_conn.cursor()
-            cursor.execute(query, {
-                'days_back': self.days_back,
-                'batch_size': self.bulk_batch_size
-            })
+            cursor.execute(query, {'days_back': self.days_back})
 
             rows = cursor.fetchall()
             cursor.close()
 
             calls = [{'call_id': row[0], 'call_time': row[1]} for row in rows]
-
-            if calls:
-                oracle_logger.info(f"[BULK] Found {len(calls)} calls to process")
+            oracle_logger.info(f"[BULK] Found {len(calls)} total calls to process")
 
             return calls
 
@@ -364,22 +358,20 @@ class BackfillService:
             return
 
         try:
-            # Phase 1: BULK
+            # Phase 1: BULK - ONE-TIME full table scan
             logger.info("")
             logger.info("=" * 40)
-            logger.info("PHASE 1: BULK (90 days, PARALLEL)")
+            logger.info("PHASE 1: BULK (90 days, PARALLEL) - ONE TIME")
             logger.info("=" * 40)
 
-            while self.phase == 'BULK':
-                calls = self.collect_bulk_calls()
+            bulk_calls = self.collect_bulk_calls()
+            if bulk_calls:
+                logger.info(f"Processing {len(bulk_calls)} calls from bulk scan...")
+                self.process_batch(bulk_calls)
+            else:
+                logger.info("No bulk calls found - skipping to DELTA")
 
-                if not calls:
-                    logger.info("Bulk phase complete - no more records")
-                    self.phase = 'DELTA'
-                    break
-
-                self.process_batch(calls)
-                time.sleep(0.5)  # Small delay between batches
+            self.phase = 'DELTA'
 
             # Phase 2: DELTA
             logger.info("")
