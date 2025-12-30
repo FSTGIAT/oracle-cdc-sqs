@@ -294,7 +294,8 @@ class BackfillService:
 
     def process_batch(self, calls: List[Dict]):
         """Process a batch of calls"""
-        for call in calls:
+        total_calls = len(calls)
+        for i, call in enumerate(calls):
             call_id = call['call_id']
             call_time = call['call_time']
 
@@ -315,10 +316,12 @@ class BackfillService:
 
             self.total_processed += 1
 
-        # Progress update
-        elapsed = (datetime.now() - self.start_time).total_seconds()
-        rate = self.total_processed / elapsed if elapsed > 0 else 0
-        logger.info(f"[{self.phase}] Processed: {self.total_processed} | Sent: {self.total_sent} | Skipped: {self.total_skipped} | Rate: {rate:.1f}/sec")
+            # Progress update every 100 calls
+            if self.total_processed % 100 == 0:
+                elapsed = (datetime.now() - self.start_time).total_seconds()
+                rate = self.total_processed / elapsed if elapsed > 0 else 0
+                pct = (i + 1) / total_calls * 100
+                logger.info(f"[{self.phase}] Processed: {self.total_processed} | Sent: {self.total_sent} | Skipped: {self.total_skipped} | Rate: {rate:.1f}/sec | {pct:.1f}%")
 
     def print_summary(self):
         """Print final summary"""
