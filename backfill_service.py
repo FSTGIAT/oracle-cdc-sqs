@@ -344,7 +344,7 @@ class BackfillService:
         logger.info("=" * 60)
         logger.info("BACKFILL SERVICE STARTING")
         logger.info(f"Days back: {self.days_back}")
-        logger.info(f"Bulk batch size: {self.bulk_batch_size}")
+        logger.info(f"Bulk: ONE-TIME full scan (no batching)")
         logger.info(f"Delta batch size: {self.delta_batch_size}")
         logger.info("=" * 60)
 
