@@ -405,6 +405,28 @@ def api_call_details(call_id):
     queue_result = execute_single(queue_query, {'call_id': call_id})
     result['queue_name'] = queue_result.get('queue_name') if queue_result else None
 
+    # Get subscriber status from SUBSCRIBER table
+    if result.get('subscriber_no') and result.get('ban'):
+        status_query = """
+            SELECT SUB_STATUS, PRODUCT_CODE
+            FROM SUBSCRIBER
+            WHERE TRUNC(SUBSCRIBER_NO) = TRUNC(:subscriber_no)
+            AND CUSTOMER_BAN = :ban
+        """
+        status_result = execute_single(status_query, {
+            'subscriber_no': result['subscriber_no'],
+            'ban': result['ban']
+        })
+        if status_result:
+            result['sub_status'] = status_result.get('sub_status')
+            result['product_code'] = status_result.get('product_code')
+        else:
+            result['sub_status'] = None
+            result['product_code'] = None
+    else:
+        result['sub_status'] = None
+        result['product_code'] = None
+
     return jsonify(result)
 
 
@@ -473,59 +495,77 @@ def api_health():
 @app.route('/api/subscriber-status/<subscriber_no>/<ban>')
 def api_subscriber_status(subscriber_no, ban):
     """Get subscriber active status from SUBSCRIBER table"""
-    try:
-        query = """
-            SELECT SUB_STATUS, PRODUCT_CODE
-            FROM SUBSCRIBER
-            WHERE TRUNC(SUBSCRIBER_NO) = TRUNC(:subscriber_no)
-            AND CUSTOMER_BAN = :ban
-        """
-        result = execute_single(query, {'subscriber_no': subscriber_no, 'ban': ban})
-        return jsonify({
-            'status': result.get('sub_status', 'UNKNOWN') if result else 'UNKNOWN',
-            'is_active': result.get('sub_status') == 'A' if result else False,
-            'product_code': result.get('product_code') if result else None
-        })
-    except Exception as e:
-        # SUBSCRIBER table might not exist - return unknown
-        return jsonify({
-            'status': 'UNKNOWN',
-            'is_active': False,
-            'product_code': None
-        })
+    query = """
+        SELECT SUB_STATUS, PRODUCT_CODE
+        FROM SUBSCRIBER
+        WHERE TRUNC(SUBSCRIBER_NO) = TRUNC(:subscriber_no)
+        AND CUSTOMER_BAN = :ban
+    """
+    result = execute_single(query, {'subscriber_no': subscriber_no, 'ban': ban})
+    return jsonify({
+        'status': result.get('sub_status', 'UNKNOWN') if result else 'UNKNOWN',
+        'is_active': result.get('sub_status') == 'A' if result else False,
+        'product_code': result.get('product_code') if result else None
+    })
 
 
 @app.route('/api/churn/accuracy')
 def api_churn_accuracy():
-    """Get churn prediction accuracy stats for high risk (score >= 70)"""
-    # Simple count query - no SUBSCRIBER join needed
-    query = """
+    """Get churn prediction accuracy stats for score >= 70"""
+    # Query 1: Total predictions with churn_score >= 70
+    total_query = """
         SELECT COUNT(*) as total_predictions
         FROM CONVERSATION_SUMMARY
         WHERE CHURN_SCORE >= 70
     """
-    result = execute_single(query)
-    total_predictions = result.get('total_predictions', 0) or 0
 
-    # For now return predictions only - actual churns requires SUBSCRIBER table
+    # Query 2: Actual churns (subscribers with score>=70 who churned)
+    actual_query = """
+        SELECT COUNT(*) as actual_churns
+        FROM SUBSCRIBER
+        WHERE (TRUNC(SUBSCRIBER_NO), CUSTOMER_BAN) IN (
+            SELECT TRUNC(SUBSCRIBER_NO), BAN
+            FROM CONVERSATION_SUMMARY
+            WHERE CHURN_SCORE >= 70
+        ) AND SUB_STATUS = 'C'
+    """
+
+    total = execute_single(total_query)
+    actual = execute_single(actual_query)
+
+    total_predictions = total.get('total_predictions', 0) or 0
+    actual_churns = actual.get('actual_churns', 0) or 0
+    accuracy = round((actual_churns / total_predictions * 100), 1) if total_predictions > 0 else 0
+
     return jsonify({
         'total_predictions': total_predictions,
-        'actual_churns': 0,
-        'accuracy_rate': 0,
-        'false_positives': total_predictions
+        'actual_churns': actual_churns,
+        'accuracy_rate': accuracy,
+        'false_positives': total_predictions - actual_churns
     })
 
 
 @app.route('/api/churn/by-product')
 def api_churn_by_product():
-    """Get churn breakdown by product code - placeholder until SUBSCRIBER table available"""
-    # Return empty - requires SUBSCRIBER table join
-    return jsonify([])
+    """Get churn breakdown by product code"""
+    query = """
+        SELECT PRODUCT_CODE, COUNT(*) as count
+        FROM SUBSCRIBER
+        WHERE (TRUNC(SUBSCRIBER_NO), CUSTOMER_BAN) IN (
+            SELECT TRUNC(SUBSCRIBER_NO), BAN
+            FROM CONVERSATION_SUMMARY
+            WHERE CHURN_SCORE >= 70
+        ) AND SUB_STATUS = 'C'
+        GROUP BY PRODUCT_CODE
+        ORDER BY count DESC
+    """
+    results = execute_query(query)
+    return jsonify(results)
 
 
 @app.route('/api/churn/by-score-range')
 def api_churn_by_score_range():
-    """Get churn analysis by score ranges - simple version without SUBSCRIBER join"""
+    """Get churn analysis by score ranges (90-100, 70-90, 40-70, 0-40)"""
     ranges = [
         {'label': '90-100 (Critical)', 'min': 90, 'max': 100},
         {'label': '70-90 (High)', 'min': 70, 'max': 89},
@@ -535,21 +575,37 @@ def api_churn_by_score_range():
 
     results = []
     for r in ranges:
-        query = """
+        # Total predictions in this range
+        pred_query = """
             SELECT COUNT(*) as count
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
         """
-        pred = execute_single(query, {'min_score': r['min'], 'max_score': r['max']})
+        pred = execute_single(pred_query, {'min_score': r['min'], 'max_score': r['max']})
+
+        # Actual churns in this range
+        churn_query = """
+            SELECT COUNT(*) as count
+            FROM SUBSCRIBER
+            WHERE (TRUNC(SUBSCRIBER_NO), CUSTOMER_BAN) IN (
+                SELECT TRUNC(SUBSCRIBER_NO), BAN
+                FROM CONVERSATION_SUMMARY
+                WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
+            ) AND SUB_STATUS = 'C'
+        """
+        churns = execute_single(churn_query, {'min_score': r['min'], 'max_score': r['max']})
+
         predictions = pred.get('count', 0) or 0
+        actual_churns = churns.get('count', 0) or 0
+        accuracy = round((actual_churns / predictions * 100), 1) if predictions > 0 else 0
 
         results.append({
             'label': r['label'],
             'range': f"{r['min']}-{r['max']}",
             'predictions': predictions,
-            'actual_churns': 0,
-            'accuracy': 0,
-            'false_positives': predictions
+            'actual_churns': actual_churns,
+            'accuracy': accuracy,
+            'false_positives': predictions - actual_churns
         })
 
     return jsonify(results)
@@ -580,23 +636,27 @@ def api_churn_trend():
 
 @app.route('/api/churn/high-risk-calls')
 def api_high_risk_calls():
-    """Get list of high risk calls (score >= 70) - without SUBSCRIBER join"""
+    """Get list of high risk calls (score >= 70) with subscriber status"""
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 100, type=int)
 
     query = """
         SELECT
-            SOURCE_ID as call_id,
-            SOURCE_TYPE as type,
-            TO_CHAR(CREATION_DATE, 'YYYY-MM-DD HH24:MI') as created,
-            CHURN_SCORE as churn_score,
-            SUBSCRIBER_NO as subscriber_no,
-            BAN as ban,
-            SUBSTR(SUMMARY, 1, 100) as summary
-        FROM CONVERSATION_SUMMARY
-        WHERE CHURN_SCORE >= 70
-        AND CREATION_DATE > SYSDATE - :days
-        ORDER BY CHURN_SCORE DESC, CREATION_DATE DESC
+            cs.SOURCE_ID as call_id,
+            cs.SOURCE_TYPE as type,
+            TO_CHAR(cs.CREATION_DATE, 'YYYY-MM-DD HH24:MI') as created,
+            cs.CHURN_SCORE as churn_score,
+            cs.SUBSCRIBER_NO as subscriber_no,
+            cs.BAN as ban,
+            SUBSTR(cs.SUMMARY, 1, 100) as summary,
+            s.SUB_STATUS as sub_status,
+            s.PRODUCT_CODE as product_code
+        FROM CONVERSATION_SUMMARY cs
+        LEFT JOIN SUBSCRIBER s ON TRUNC(cs.SUBSCRIBER_NO) = TRUNC(s.SUBSCRIBER_NO)
+                                 AND cs.BAN = s.CUSTOMER_BAN
+        WHERE cs.CHURN_SCORE >= 70
+        AND cs.CREATION_DATE > SYSDATE - :days
+        ORDER BY cs.CHURN_SCORE DESC, cs.CREATION_DATE DESC
         FETCH FIRST :limit ROWS ONLY
     """
 

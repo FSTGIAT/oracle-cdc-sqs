@@ -1016,33 +1016,18 @@
                 // Display queue name
                 document.getElementById('callQueueName').textContent = details.queue_name || '-';
 
-                // Fetch and display subscriber status
+                // Display subscriber status (now included in call details response)
                 const statusBadge = document.getElementById('callCustomerStatus');
                 const statusText = document.getElementById('callCustomerStatusText');
 
-                if (details.subscriber_no && details.ban) {
-                    try {
-                        const statusRes = await fetch(`${API_BASE}/api/subscriber-status/${details.subscriber_no}/${details.ban}`);
-                        const status = await statusRes.json();
-
-                        if (status.is_active) {
-                            statusBadge.className = 'badge bg-success ms-2';
-                            statusBadge.textContent = 'Active';
-                            statusText.innerHTML = '<span class="text-success">✓ Active Customer</span>';
-                        } else if (status.status === 'C') {
-                            statusBadge.className = 'badge bg-danger ms-2';
-                            statusBadge.textContent = 'Churned';
-                            statusText.innerHTML = '<span class="text-danger">✗ Churned Customer</span>';
-                        } else {
-                            statusBadge.className = 'badge bg-secondary ms-2';
-                            statusBadge.textContent = status.status || 'Unknown';
-                            statusText.textContent = status.status || 'Unknown';
-                        }
-                    } catch (e) {
-                        statusBadge.className = 'badge bg-secondary ms-2';
-                        statusBadge.textContent = '-';
-                        statusText.textContent = '-';
-                    }
+                if (details.sub_status === 'A') {
+                    statusBadge.className = 'badge bg-success ms-2';
+                    statusBadge.textContent = 'Active';
+                    statusText.innerHTML = '<span class="text-success">✓ Active Customer</span>';
+                } else if (details.sub_status === 'C') {
+                    statusBadge.className = 'badge bg-danger ms-2';
+                    statusBadge.textContent = 'Churned';
+                    statusText.innerHTML = '<span class="text-danger">✗ Churned Customer</span>';
                 } else {
                     statusBadge.className = 'badge bg-secondary ms-2';
                     statusBadge.textContent = '-';
