@@ -450,7 +450,7 @@
                 <div class="card text-center">
                     <div class="card-body">
                         <div class="stat-value text-primary" id="churnTotalPredictions">-</div>
-                        <div class="stat-label">Total Predictions (score=100)</div>
+                        <div class="stat-label">High Risk Predictions (70+)</div>
                     </div>
                 </div>
             </div>
@@ -484,7 +484,7 @@
         <div class="row mb-4">
             <div class="col-md-5">
                 <div class="card">
-                    <div class="card-header">Prediction Accuracy (Score=100)</div>
+                    <div class="card-header">Prediction Accuracy (High Risk 70+)</div>
                     <div class="card-body">
                         <div class="chart-container">
                             <canvas id="churnAccuracyChart"></canvas>
@@ -1635,6 +1635,7 @@
         let churnAnalyticsLoaded = false;
 
         async function loadChurnAnalytics() {
+            console.log('Loading churn analytics...');
             try {
                 // Load all data in parallel
                 const [accuracyRes, productRes, rangeRes, trendRes, highRiskRes] = await Promise.all([
@@ -1645,11 +1646,21 @@
                     fetch(`${API_BASE}/api/churn/high-risk-calls?days=7&limit=100`)
                 ]);
 
+                console.log('Responses received:', {
+                    accuracy: accuracyRes.status,
+                    product: productRes.status,
+                    range: rangeRes.status,
+                    trend: trendRes.status,
+                    highRisk: highRiskRes.status
+                });
+
                 const accuracy = await accuracyRes.json();
                 const products = await productRes.json();
                 const ranges = await rangeRes.json();
                 const trend = await trendRes.json();
                 const highRisk = await highRiskRes.json();
+
+                console.log('Data loaded:', { accuracy, products, ranges, trend, highRisk });
 
                 // === KPI Cards ===
                 document.getElementById('churnTotalPredictions').textContent = accuracy.total_predictions?.toLocaleString() || '-';
@@ -1756,10 +1767,12 @@
 
             } catch (error) {
                 console.error('Error loading churn analytics:', error);
+                alert('Error loading churn analytics: ' + error.message);
             }
         }
 
         function renderChurnTrendChart(trend) {
+            console.log('Rendering trend chart with data:', trend);
             if (churnTrendChartInstance) churnTrendChartInstance.destroy();
             churnTrendChartInstance = new Chart(document.getElementById('churnTrendChart'), {
                 type: 'line',

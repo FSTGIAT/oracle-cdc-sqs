@@ -489,30 +489,22 @@ def api_subscriber_status(subscriber_no, ban):
 
 @app.route('/api/churn/accuracy')
 def api_churn_accuracy():
-    """Get churn prediction accuracy stats for score=100"""
-    # Query 1: Total predictions with churn_score = 100
-    total_query = """
-        SELECT COUNT(*) as total_predictions
-        FROM CONVERSATION_SUMMARY
-        WHERE CHURN_SCORE = 100
+    """Get churn prediction accuracy stats for high risk (score >= 70) - OPTIMIZED"""
+    # Single query with JOIN instead of IN subquery
+    query = """
+        SELECT
+            COUNT(DISTINCT cs.SOURCE_ID) as total_predictions,
+            COUNT(DISTINCT CASE WHEN s.SUB_STATUS = 'C' THEN cs.SOURCE_ID END) as actual_churns
+        FROM CONVERSATION_SUMMARY cs
+        LEFT JOIN SUBSCRIBER s ON cs.SUBSCRIBER_NO = s.SUBSCRIBER_NO
+                                 AND cs.BAN = s.CUSTOMER_BAN
+        WHERE cs.CHURN_SCORE >= 70
     """
 
-    # Query 2: Actual churns (subscribers with score=100 who churned)
-    actual_query = """
-        SELECT COUNT(*) as actual_churns
-        FROM SUBSCRIBER
-        WHERE (TRUNC(SUBSCRIBER_NO), CUSTOMER_BAN) IN (
-            SELECT TRUNC(SUBSCRIBER_NO), BAN
-            FROM CONVERSATION_SUMMARY
-            WHERE CHURN_SCORE = 100
-        ) AND SUB_STATUS = 'C'
-    """
+    result = execute_single(query)
 
-    total = execute_single(total_query)
-    actual = execute_single(actual_query)
-
-    total_predictions = total.get('total_predictions', 0) or 0
-    actual_churns = actual.get('actual_churns', 0) or 0
+    total_predictions = result.get('total_predictions', 0) or 0
+    actual_churns = result.get('actual_churns', 0) or 0
     accuracy = round((actual_churns / total_predictions * 100), 1) if total_predictions > 0 else 0
 
     return jsonify({
@@ -525,17 +517,17 @@ def api_churn_accuracy():
 
 @app.route('/api/churn/by-product')
 def api_churn_by_product():
-    """Get churn breakdown by product code"""
+    """Get churn breakdown by product code (high risk predictions that churned) - OPTIMIZED"""
     query = """
-        SELECT PRODUCT_CODE, SUB_STATUS, COUNT(*) as count
-        FROM SUBSCRIBER
-        WHERE (TRUNC(SUBSCRIBER_NO), CUSTOMER_BAN) IN (
-            SELECT TRUNC(SUBSCRIBER_NO), BAN
-            FROM CONVERSATION_SUMMARY
-            WHERE CHURN_SCORE = 100
-        ) AND SUB_STATUS = 'C'
-        GROUP BY SUB_STATUS, PRODUCT_CODE
+        SELECT s.PRODUCT_CODE, COUNT(*) as count
+        FROM CONVERSATION_SUMMARY cs
+        JOIN SUBSCRIBER s ON cs.SUBSCRIBER_NO = s.SUBSCRIBER_NO
+                            AND cs.BAN = s.CUSTOMER_BAN
+        WHERE cs.CHURN_SCORE >= 70
+        AND s.SUB_STATUS = 'C'
+        GROUP BY s.PRODUCT_CODE
         ORDER BY count DESC
+        FETCH FIRST 20 ROWS ONLY
     """
     results = execute_query(query)
     return jsonify(results)
@@ -543,44 +535,60 @@ def api_churn_by_product():
 
 @app.route('/api/churn/by-score-range')
 def api_churn_by_score_range():
-    """Get churn analysis by score ranges (90-100, 70-90, 40-70, 0-40)"""
+    """Get churn analysis by score ranges - OPTIMIZED: single query instead of 8"""
+    query = """
+        SELECT
+            CASE
+                WHEN cs.CHURN_SCORE >= 90 THEN '90-100 (Critical)'
+                WHEN cs.CHURN_SCORE >= 70 THEN '70-90 (High)'
+                WHEN cs.CHURN_SCORE >= 40 THEN '40-70 (Medium)'
+                ELSE '0-40 (Low)'
+            END as label,
+            CASE
+                WHEN cs.CHURN_SCORE >= 90 THEN '90-100'
+                WHEN cs.CHURN_SCORE >= 70 THEN '70-89'
+                WHEN cs.CHURN_SCORE >= 40 THEN '40-69'
+                ELSE '0-39'
+            END as range,
+            COUNT(*) as predictions,
+            COUNT(CASE WHEN s.SUB_STATUS = 'C' THEN 1 END) as actual_churns
+        FROM CONVERSATION_SUMMARY cs
+        LEFT JOIN SUBSCRIBER s ON cs.SUBSCRIBER_NO = s.SUBSCRIBER_NO
+                                 AND cs.BAN = s.CUSTOMER_BAN
+        WHERE cs.CHURN_SCORE IS NOT NULL
+        GROUP BY
+            CASE
+                WHEN cs.CHURN_SCORE >= 90 THEN '90-100 (Critical)'
+                WHEN cs.CHURN_SCORE >= 70 THEN '70-90 (High)'
+                WHEN cs.CHURN_SCORE >= 40 THEN '40-70 (Medium)'
+                ELSE '0-40 (Low)'
+            END,
+            CASE
+                WHEN cs.CHURN_SCORE >= 90 THEN '90-100'
+                WHEN cs.CHURN_SCORE >= 70 THEN '70-89'
+                WHEN cs.CHURN_SCORE >= 40 THEN '40-69'
+                ELSE '0-39'
+            END
+        ORDER BY
+            CASE
+                WHEN cs.CHURN_SCORE >= 90 THEN 1
+                WHEN cs.CHURN_SCORE >= 70 THEN 2
+                WHEN cs.CHURN_SCORE >= 40 THEN 3
+                ELSE 4
+            END
+    """
 
-    ranges = [
-        {'label': '90-100 (Critical)', 'min': 90, 'max': 100},
-        {'label': '70-90 (High)', 'min': 70, 'max': 89},
-        {'label': '40-70 (Medium)', 'min': 40, 'max': 69},
-        {'label': '0-40 (Low)', 'min': 0, 'max': 39},
-    ]
+    rows = execute_query(query)
 
     results = []
-    for r in ranges:
-        # Total predictions in this range
-        pred_query = """
-            SELECT COUNT(*) as count
-            FROM CONVERSATION_SUMMARY
-            WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
-        """
-        pred = execute_single(pred_query, {'min_score': r['min'], 'max_score': r['max']})
-
-        # Actual churns in this range
-        churn_query = """
-            SELECT COUNT(*) as count
-            FROM SUBSCRIBER
-            WHERE (TRUNC(SUBSCRIBER_NO), CUSTOMER_BAN) IN (
-                SELECT TRUNC(SUBSCRIBER_NO), BAN
-                FROM CONVERSATION_SUMMARY
-                WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
-            ) AND SUB_STATUS = 'C'
-        """
-        churns = execute_single(churn_query, {'min_score': r['min'], 'max_score': r['max']})
-
-        predictions = pred.get('count', 0) or 0
-        actual_churns = churns.get('count', 0) or 0
+    for row in rows:
+        predictions = row.get('predictions', 0) or 0
+        actual_churns = row.get('actual_churns', 0) or 0
         accuracy = round((actual_churns / predictions * 100), 1) if predictions > 0 else 0
 
         results.append({
-            'label': r['label'],
-            'range': f"{r['min']}-{r['max']}",
+            'label': row.get('label'),
+            'range': row.get('range'),
             'predictions': predictions,
             'actual_churns': actual_churns,
             'accuracy': accuracy,
@@ -615,7 +623,7 @@ def api_churn_trend():
 
 @app.route('/api/churn/high-risk-calls')
 def api_high_risk_calls():
-    """Get list of high risk calls (score >= 70) with subscriber status"""
+    """Get list of high risk calls (score >= 70) with subscriber status - OPTIMIZED"""
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 100, type=int)
 
@@ -631,7 +639,7 @@ def api_high_risk_calls():
             s.SUB_STATUS as sub_status,
             s.PRODUCT_CODE as product_code
         FROM CONVERSATION_SUMMARY cs
-        LEFT JOIN SUBSCRIBER s ON TRUNC(cs.SUBSCRIBER_NO) = TRUNC(s.SUBSCRIBER_NO)
+        LEFT JOIN SUBSCRIBER s ON cs.SUBSCRIBER_NO = s.SUBSCRIBER_NO
                                  AND cs.BAN = s.CUSTOMER_BAN
         WHERE cs.CHURN_SCORE >= 70
         AND cs.CREATION_DATE > SYSDATE - :days
