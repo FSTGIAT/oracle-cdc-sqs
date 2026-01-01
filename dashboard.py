@@ -405,27 +405,27 @@ def api_call_details(call_id):
     queue_result = execute_single(queue_query, {'call_id': call_id})
     result['queue_name'] = queue_result.get('queue_name') if queue_result else None
 
-    # Get subscriber status from SUBSCRIBER table
+    # Get subscriber status from SUBSCRIBER table (convert subscriber_no to int)
+    result['sub_status'] = None
+    result['product_code'] = None
     if result.get('subscriber_no') and result.get('ban'):
-        status_query = """
-            SELECT SUB_STATUS, PRODUCT_CODE
-            FROM SUBSCRIBER
-            WHERE SUBSCRIBER_NO = :subscriber_no
-            AND CUSTOMER_BAN = :ban
-        """
-        status_result = execute_single(status_query, {
-            'subscriber_no': result['subscriber_no'],
-            'ban': result['ban']
-        })
-        if status_result:
-            result['sub_status'] = status_result.get('sub_status')
-            result['product_code'] = status_result.get('product_code')
-        else:
-            result['sub_status'] = None
-            result['product_code'] = None
-    else:
-        result['sub_status'] = None
-        result['product_code'] = None
+        try:
+            sub_no = int(float(result['subscriber_no']))
+            status_query = """
+                SELECT SUB_STATUS, PRODUCT_CODE
+                FROM SUBSCRIBER
+                WHERE SUBSCRIBER_NO = :sub_no
+                AND CUSTOMER_BAN = :ban
+            """
+            status_result = execute_single(status_query, {
+                'sub_no': sub_no,
+                'ban': result['ban']
+            })
+            if status_result:
+                result['sub_status'] = status_result.get('sub_status')
+                result['product_code'] = status_result.get('product_code')
+        except:
+            pass
 
     return jsonify(result)
 
@@ -512,29 +512,46 @@ def api_subscriber_status(subscriber_no, ban):
 @app.route('/api/churn/accuracy')
 def api_churn_accuracy():
     """Get churn prediction accuracy stats for score >= 70"""
-    # Query 1: Total predictions with churn_score >= 70
-    total_query = """
-        SELECT COUNT(*) as total_predictions
+    # Query 1: Get high-risk predictions with subscriber info
+    predictions_query = """
+        SELECT SUBSCRIBER_NO, BAN
         FROM CONVERSATION_SUMMARY
         WHERE CHURN_SCORE >= 70
+        AND SUBSCRIBER_NO IS NOT NULL
     """
+    predictions = execute_query(predictions_query)
+    total_predictions = len(predictions)
 
-    # Query 2: Actual churns (subscribers with score>=70 who churned)
-    actual_query = """
-        SELECT COUNT(*) as actual_churns
-        FROM SUBSCRIBER
-        WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN (
-            SELECT SUBSCRIBER_NO, BAN
-            FROM CONVERSATION_SUMMARY
-            WHERE CHURN_SCORE >= 70
-        ) AND SUB_STATUS = 'C'
-    """
+    if total_predictions == 0:
+        return jsonify({
+            'total_predictions': 0,
+            'actual_churns': 0,
+            'accuracy_rate': 0,
+            'false_positives': 0
+        })
 
-    total = execute_single(total_query)
-    actual = execute_single(actual_query)
+    # Convert subscriber numbers to integers in Python and get unique pairs
+    subscriber_set = set()
+    for p in predictions:
+        if p.get('subscriber_no') and p.get('ban'):
+            sub_no = int(float(p['subscriber_no']))
+            subscriber_set.add((sub_no, p['ban']))
 
-    total_predictions = total.get('total_predictions', 0) or 0
-    actual_churns = actual.get('actual_churns', 0) or 0
+    # Build IN clause with converted values (batch query)
+    if not subscriber_set:
+        actual_churns = 0
+    else:
+        # Create pairs for IN clause
+        pairs = ', '.join([f"({sub_no}, '{ban}')" for sub_no, ban in subscriber_set])
+        actual_query = f"""
+            SELECT COUNT(*) as actual_churns
+            FROM SUBSCRIBER
+            WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN ({pairs})
+            AND SUB_STATUS = 'C'
+        """
+        result = execute_single(actual_query)
+        actual_churns = result.get('actual_churns', 0) or 0
+
     accuracy = round((actual_churns / total_predictions * 100), 1) if total_predictions > 0 else 0
 
     return jsonify({
@@ -548,14 +565,35 @@ def api_churn_accuracy():
 @app.route('/api/churn/by-product')
 def api_churn_by_product():
     """Get churn breakdown by product code"""
-    query = """
+    # Get high-risk predictions
+    predictions_query = """
+        SELECT SUBSCRIBER_NO, BAN
+        FROM CONVERSATION_SUMMARY
+        WHERE CHURN_SCORE >= 70
+        AND SUBSCRIBER_NO IS NOT NULL
+    """
+    predictions = execute_query(predictions_query)
+
+    if not predictions:
+        return jsonify([])
+
+    # Convert subscriber numbers to integers in Python
+    subscriber_set = set()
+    for p in predictions:
+        if p.get('subscriber_no') and p.get('ban'):
+            sub_no = int(float(p['subscriber_no']))
+            subscriber_set.add((sub_no, p['ban']))
+
+    if not subscriber_set:
+        return jsonify([])
+
+    # Build IN clause with converted values
+    pairs = ', '.join([f"({sub_no}, '{ban}')" for sub_no, ban in subscriber_set])
+    query = f"""
         SELECT PRODUCT_CODE, COUNT(*) as count
         FROM SUBSCRIBER
-        WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN (
-            SELECT SUBSCRIBER_NO, BAN
-            FROM CONVERSATION_SUMMARY
-            WHERE CHURN_SCORE >= 70
-        ) AND SUB_STATUS = 'C'
+        WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN ({pairs})
+        AND SUB_STATUS = 'C'
         GROUP BY PRODUCT_CODE
         ORDER BY count DESC
     """
@@ -577,26 +615,34 @@ def api_churn_by_score_range():
     for r in ranges:
         # Total predictions in this range
         pred_query = """
-            SELECT COUNT(*) as count
+            SELECT SUBSCRIBER_NO, BAN
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
+            AND SUBSCRIBER_NO IS NOT NULL
         """
-        pred = execute_single(pred_query, {'min_score': r['min'], 'max_score': r['max']})
+        predictions_data = execute_query(pred_query, {'min_score': r['min'], 'max_score': r['max']})
+        predictions = len(predictions_data)
 
-        # Actual churns in this range
-        churn_query = """
-            SELECT COUNT(*) as count
-            FROM SUBSCRIBER
-            WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN (
-                SELECT SUBSCRIBER_NO, BAN
-                FROM CONVERSATION_SUMMARY
-                WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
-            ) AND SUB_STATUS = 'C'
-        """
-        churns = execute_single(churn_query, {'min_score': r['min'], 'max_score': r['max']})
+        # Convert and get actual churns
+        actual_churns = 0
+        if predictions_data:
+            subscriber_set = set()
+            for p in predictions_data:
+                if p.get('subscriber_no') and p.get('ban'):
+                    sub_no = int(float(p['subscriber_no']))
+                    subscriber_set.add((sub_no, p['ban']))
 
-        predictions = pred.get('count', 0) or 0
-        actual_churns = churns.get('count', 0) or 0
+            if subscriber_set:
+                pairs = ', '.join([f"({sub_no}, '{ban}')" for sub_no, ban in subscriber_set])
+                churn_query = f"""
+                    SELECT COUNT(*) as count
+                    FROM SUBSCRIBER
+                    WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN ({pairs})
+                    AND SUB_STATUS = 'C'
+                """
+                churns = execute_single(churn_query)
+                actual_churns = churns.get('count', 0) or 0
+
         accuracy = round((actual_churns / predictions * 100), 1) if predictions > 0 else 0
 
         results.append({
@@ -640,28 +686,45 @@ def api_high_risk_calls():
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 100, type=int)
 
+    # Get calls from CONVERSATION_SUMMARY
     query = """
         SELECT
-            cs.SOURCE_ID as call_id,
-            cs.SOURCE_TYPE as type,
-            TO_CHAR(cs.CREATION_DATE, 'YYYY-MM-DD HH24:MI') as created,
-            cs.CHURN_SCORE as churn_score,
-            cs.SUBSCRIBER_NO as subscriber_no,
-            cs.BAN as ban,
-            SUBSTR(cs.SUMMARY, 1, 100) as summary,
-            s.SUB_STATUS as sub_status,
-            s.PRODUCT_CODE as product_code
-        FROM CONVERSATION_SUMMARY cs
-        LEFT JOIN SUBSCRIBER s ON cs.SUBSCRIBER_NO = s.SUBSCRIBER_NO
-                                 AND cs.BAN = s.CUSTOMER_BAN
-        WHERE cs.CHURN_SCORE >= 70
-        AND cs.CREATION_DATE > SYSDATE - :days
-        ORDER BY cs.CHURN_SCORE DESC, cs.CREATION_DATE DESC
+            SOURCE_ID as call_id,
+            SOURCE_TYPE as type,
+            TO_CHAR(CREATION_DATE, 'YYYY-MM-DD HH24:MI') as created,
+            CHURN_SCORE as churn_score,
+            SUBSCRIBER_NO as subscriber_no,
+            BAN as ban,
+            SUBSTR(SUMMARY, 1, 100) as summary
+        FROM CONVERSATION_SUMMARY
+        WHERE CHURN_SCORE >= 70
+        AND CREATION_DATE > SYSDATE - :days
+        ORDER BY CHURN_SCORE DESC, CREATION_DATE DESC
         FETCH FIRST :limit ROWS ONLY
     """
+    calls = execute_query(query, {'days': days, 'limit': limit})
 
-    results = execute_query(query, {'days': days, 'limit': limit})
-    return jsonify(results)
+    # Get subscriber status for each call (with converted subscriber_no)
+    for call in calls:
+        call['sub_status'] = None
+        call['product_code'] = None
+        if call.get('subscriber_no') and call.get('ban'):
+            try:
+                sub_no = int(float(call['subscriber_no']))
+                status_query = """
+                    SELECT SUB_STATUS, PRODUCT_CODE
+                    FROM SUBSCRIBER
+                    WHERE SUBSCRIBER_NO = :sub_no
+                    AND CUSTOMER_BAN = :ban
+                """
+                status = execute_single(status_query, {'sub_no': sub_no, 'ban': call['ban']})
+                if status:
+                    call['sub_status'] = status.get('sub_status')
+                    call['product_code'] = status.get('product_code')
+            except:
+                pass
+
+    return jsonify(calls)
 
 
 # ========================================
