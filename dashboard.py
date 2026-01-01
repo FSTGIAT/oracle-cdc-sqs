@@ -410,7 +410,7 @@ def api_call_details(call_id):
         status_query = """
             SELECT SUB_STATUS, PRODUCT_CODE
             FROM SUBSCRIBER
-            WHERE TRUNC(SUBSCRIBER_NO) = TRUNC(:subscriber_no)
+            WHERE SUBSCRIBER_NO = :subscriber_no
             AND CUSTOMER_BAN = :ban
         """
         status_result = execute_single(status_query, {
@@ -498,7 +498,7 @@ def api_subscriber_status(subscriber_no, ban):
     query = """
         SELECT SUB_STATUS, PRODUCT_CODE
         FROM SUBSCRIBER
-        WHERE TRUNC(SUBSCRIBER_NO) = TRUNC(:subscriber_no)
+        WHERE SUBSCRIBER_NO = :subscriber_no
         AND CUSTOMER_BAN = :ban
     """
     result = execute_single(query, {'subscriber_no': subscriber_no, 'ban': ban})
@@ -523,8 +523,8 @@ def api_churn_accuracy():
     actual_query = """
         SELECT COUNT(*) as actual_churns
         FROM SUBSCRIBER
-        WHERE (TRUNC(SUBSCRIBER_NO), CUSTOMER_BAN) IN (
-            SELECT TRUNC(SUBSCRIBER_NO), BAN
+        WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN (
+            SELECT SUBSCRIBER_NO, BAN
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= 70
         ) AND SUB_STATUS = 'C'
@@ -551,8 +551,8 @@ def api_churn_by_product():
     query = """
         SELECT PRODUCT_CODE, COUNT(*) as count
         FROM SUBSCRIBER
-        WHERE (TRUNC(SUBSCRIBER_NO), CUSTOMER_BAN) IN (
-            SELECT TRUNC(SUBSCRIBER_NO), BAN
+        WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN (
+            SELECT SUBSCRIBER_NO, BAN
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= 70
         ) AND SUB_STATUS = 'C'
@@ -587,8 +587,8 @@ def api_churn_by_score_range():
         churn_query = """
             SELECT COUNT(*) as count
             FROM SUBSCRIBER
-            WHERE (TRUNC(SUBSCRIBER_NO), CUSTOMER_BAN) IN (
-                SELECT TRUNC(SUBSCRIBER_NO), BAN
+            WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN (
+                SELECT SUBSCRIBER_NO, BAN
                 FROM CONVERSATION_SUMMARY
                 WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
             ) AND SUB_STATUS = 'C'
@@ -652,7 +652,7 @@ def api_high_risk_calls():
             s.SUB_STATUS as sub_status,
             s.PRODUCT_CODE as product_code
         FROM CONVERSATION_SUMMARY cs
-        LEFT JOIN SUBSCRIBER s ON TRUNC(cs.SUBSCRIBER_NO) = TRUNC(s.SUBSCRIBER_NO)
+        LEFT JOIN SUBSCRIBER s ON cs.SUBSCRIBER_NO = s.SUBSCRIBER_NO
                                  AND cs.BAN = s.CUSTOMER_BAN
         WHERE cs.CHURN_SCORE >= 70
         AND cs.CREATION_DATE > SYSDATE - :days
