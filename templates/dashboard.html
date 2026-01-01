@@ -137,6 +137,11 @@
                 <span class="badge bg-warning text-dark ms-1" id="pendingBadge" style="display: none;">0</span>
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="churnanalytics-tab" data-bs-toggle="tab" data-bs-target="#churnAnalyticsPane" type="button" role="tab">
+                Churn Analytics
+            </button>
+        </li>
     </ul>
 
     <div class="tab-content">
@@ -435,6 +440,152 @@
         </div>
     </div>
     </div><!-- End ML Quality Tab Pane -->
+
+    <!-- Churn Analytics Tab Pane -->
+    <div class="tab-pane fade" id="churnAnalyticsPane" role="tabpanel">
+    <div class="container-fluid mt-4">
+        <!-- KPI Cards Row -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="stat-value text-primary" id="churnTotalPredictions">-</div>
+                        <div class="stat-label">Total Predictions (score=100)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="stat-value text-danger" id="churnActualChurns">-</div>
+                        <div class="stat-label">Actual Churns</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="stat-value text-success" id="churnAccuracyRate">-</div>
+                        <div class="stat-label">Accuracy Rate %</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <div class="stat-value text-warning" id="churnFalsePositives">-</div>
+                        <div class="stat-label">False Positives</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 1: Accuracy Pie + By Product Bar -->
+        <div class="row mb-4">
+            <div class="col-md-5">
+                <div class="card">
+                    <div class="card-header">Prediction Accuracy (Score=100)</div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="churnAccuracyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card">
+                    <div class="card-header">Churn by Product Code</div>
+                    <div class="card-body">
+                        <div class="chart-container" style="height: 300px;">
+                            <canvas id="churnByProductChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 2: Score Range Analysis -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">Accuracy by Score Range</div>
+                    <div class="card-body">
+                        <div class="chart-container" style="height: 300px;">
+                            <canvas id="churnScoreRangeChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">Score Range Breakdown</div>
+                    <div class="card-body">
+                        <table class="table table-sm table-striped" id="scoreRangeTable">
+                            <thead>
+                                <tr>
+                                    <th>Score Range</th>
+                                    <th>Predictions</th>
+                                    <th>Actual Churns</th>
+                                    <th>Accuracy %</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 3: Trend Over Time -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Churn Risk Trend Over Time</span>
+                        <select id="churnTrendDays" class="form-select form-select-sm" style="width: auto;">
+                            <option value="7">Last 7 Days</option>
+                            <option value="30" selected>Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                        </select>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" style="height: 300px;">
+                            <canvas id="churnTrendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Row 4: High Risk Calls Table -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>High Risk Calls (Score >= 70)</span>
+                        <span class="badge bg-danger" id="highRiskCount">0</span>
+                    </div>
+                    <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-sm table-hover" id="highRiskTable">
+                            <thead class="sticky-top bg-light">
+                                <tr>
+                                    <th>Call ID</th>
+                                    <th>Date</th>
+                                    <th>Score</th>
+                                    <th>Subscriber</th>
+                                    <th>Status</th>
+                                    <th>Product</th>
+                                    <th>Summary</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div><!-- End Churn Analytics Tab Pane -->
     </div><!-- End tab-content -->
 
     <!-- Category Calls Modal -->
@@ -480,6 +631,7 @@
                     <h5 class="modal-title">
                         <span>Call Details: </span>
                         <span id="callModalId" class="text-info">-</span>
+                        <span id="callCustomerStatus" class="badge ms-2">-</span>
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
@@ -530,6 +682,20 @@
                                             <div class="detail-item">
                                                 <div class="detail-label">Categories</div>
                                                 <div class="detail-value" id="callCategories">-</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-2">
+                                        <div class="col-6">
+                                            <div class="detail-item">
+                                                <div class="detail-label">Customer Status</div>
+                                                <div class="detail-value" id="callCustomerStatusText">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="detail-item">
+                                                <div class="detail-label">Queue Name</div>
+                                                <div class="detail-value" id="callQueueName">-</div>
                                             </div>
                                         </div>
                                     </div>
@@ -846,6 +1012,42 @@
                 currentCategoriesForFeedback = details.categories || [];
                 document.getElementById('callCategories').innerHTML = currentCategoriesForFeedback
                     .map(c => `<span class="badge bg-info me-1">${c}</span>`).join('') || '-';
+
+                // Display queue name
+                document.getElementById('callQueueName').textContent = details.queue_name || '-';
+
+                // Fetch and display subscriber status
+                const statusBadge = document.getElementById('callCustomerStatus');
+                const statusText = document.getElementById('callCustomerStatusText');
+
+                if (details.subscriber_no && details.ban) {
+                    try {
+                        const statusRes = await fetch(`${API_BASE}/api/subscriber-status/${details.subscriber_no}/${details.ban}`);
+                        const status = await statusRes.json();
+
+                        if (status.is_active) {
+                            statusBadge.className = 'badge bg-success ms-2';
+                            statusBadge.textContent = 'Active';
+                            statusText.innerHTML = '<span class="text-success">✓ Active Customer</span>';
+                        } else if (status.status === 'C') {
+                            statusBadge.className = 'badge bg-danger ms-2';
+                            statusBadge.textContent = 'Churned';
+                            statusText.innerHTML = '<span class="text-danger">✗ Churned Customer</span>';
+                        } else {
+                            statusBadge.className = 'badge bg-secondary ms-2';
+                            statusBadge.textContent = status.status || 'Unknown';
+                            statusText.textContent = status.status || 'Unknown';
+                        }
+                    } catch (e) {
+                        statusBadge.className = 'badge bg-secondary ms-2';
+                        statusBadge.textContent = '-';
+                        statusText.textContent = '-';
+                    }
+                } else {
+                    statusBadge.className = 'badge bg-secondary ms-2';
+                    statusBadge.textContent = '-';
+                    statusText.textContent = '-';
+                }
 
                 // Populate conversation
                 document.getElementById('messageCount').textContent = `${conversation.message_count || 0} messages`;
@@ -1425,6 +1627,187 @@
             document.getElementById('quickCorrectCategory').value = '';
         }
 
+        // ========================================
+        // CHURN ANALYTICS
+        // ========================================
+        let churnAccuracyChartInstance, churnByProductChartInstance;
+        let churnScoreRangeChartInstance, churnTrendChartInstance;
+        let churnAnalyticsLoaded = false;
+
+        async function loadChurnAnalytics() {
+            try {
+                // Load all data in parallel
+                const [accuracyRes, productRes, rangeRes, trendRes, highRiskRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/churn/accuracy`),
+                    fetch(`${API_BASE}/api/churn/by-product`),
+                    fetch(`${API_BASE}/api/churn/by-score-range`),
+                    fetch(`${API_BASE}/api/churn/trend?days=30`),
+                    fetch(`${API_BASE}/api/churn/high-risk-calls?days=7&limit=100`)
+                ]);
+
+                const accuracy = await accuracyRes.json();
+                const products = await productRes.json();
+                const ranges = await rangeRes.json();
+                const trend = await trendRes.json();
+                const highRisk = await highRiskRes.json();
+
+                // === KPI Cards ===
+                document.getElementById('churnTotalPredictions').textContent = accuracy.total_predictions?.toLocaleString() || '-';
+                document.getElementById('churnActualChurns').textContent = accuracy.actual_churns?.toLocaleString() || '-';
+                document.getElementById('churnAccuracyRate').textContent = (accuracy.accuracy_rate || 0) + '%';
+                document.getElementById('churnFalsePositives').textContent = accuracy.false_positives?.toLocaleString() || '-';
+
+                // === Accuracy Pie Chart ===
+                if (churnAccuracyChartInstance) churnAccuracyChartInstance.destroy();
+                churnAccuracyChartInstance = new Chart(document.getElementById('churnAccuracyChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Correct Predictions', 'False Positives'],
+                        datasets: [{
+                            data: [accuracy.actual_churns || 0, accuracy.false_positives || 0],
+                            backgroundColor: ['#28a745', '#ffc107']
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                });
+
+                // === By Product Chart ===
+                if (churnByProductChartInstance) churnByProductChartInstance.destroy();
+                churnByProductChartInstance = new Chart(document.getElementById('churnByProductChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: products.map(p => p.product_code || 'Unknown'),
+                        datasets: [{
+                            label: 'Churned Customers',
+                            data: products.map(p => p.count),
+                            backgroundColor: '#dc3545'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: { legend: { display: false } }
+                    }
+                });
+
+                // === Score Range Chart (Grouped Bar) ===
+                if (churnScoreRangeChartInstance) churnScoreRangeChartInstance.destroy();
+                churnScoreRangeChartInstance = new Chart(document.getElementById('churnScoreRangeChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: ranges.map(r => r.label),
+                        datasets: [
+                            {
+                                label: 'Predictions',
+                                data: ranges.map(r => r.predictions),
+                                backgroundColor: '#0d6efd'
+                            },
+                            {
+                                label: 'Actual Churns',
+                                data: ranges.map(r => r.actual_churns),
+                                backgroundColor: '#dc3545'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top' } }
+                    }
+                });
+
+                // === Score Range Table ===
+                const tableBody = document.querySelector('#scoreRangeTable tbody');
+                tableBody.innerHTML = ranges.map(r => `
+                    <tr>
+                        <td><strong>${r.label}</strong></td>
+                        <td>${(r.predictions || 0).toLocaleString()}</td>
+                        <td>${(r.actual_churns || 0).toLocaleString()}</td>
+                        <td>
+                            <span class="badge ${r.accuracy >= 50 ? 'bg-success' : r.accuracy >= 30 ? 'bg-warning' : 'bg-secondary'}">
+                                ${r.accuracy || 0}%
+                            </span>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // === Trend Chart ===
+                renderChurnTrendChart(trend);
+
+                // === High Risk Table ===
+                document.getElementById('highRiskCount').textContent = highRisk.length;
+                const highRiskBody = document.querySelector('#highRiskTable tbody');
+                highRiskBody.innerHTML = highRisk.map(c => `
+                    <tr class="call-row" onclick="showCallDetails('${escapeHtml(String(c.call_id || ''))}')">
+                        <td><code class="text-primary">${c.call_id || '-'}</code></td>
+                        <td>${c.created || '-'}</td>
+                        <td><span class="badge bg-danger">${c.churn_score || '-'}</span></td>
+                        <td>${c.subscriber_no || '-'}</td>
+                        <td>
+                            <span class="badge ${c.sub_status === 'A' ? 'bg-success' : c.sub_status === 'C' ? 'bg-danger' : 'bg-secondary'}">
+                                ${c.sub_status === 'A' ? 'Active' : c.sub_status === 'C' ? 'Churned' : c.sub_status || 'Unknown'}
+                            </span>
+                        </td>
+                        <td>${c.product_code || '-'}</td>
+                        <td class="summary-preview">${(c.summary || '-').substring(0, 60)}${c.summary?.length > 60 ? '...' : ''}</td>
+                    </tr>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading churn analytics:', error);
+            }
+        }
+
+        function renderChurnTrendChart(trend) {
+            if (churnTrendChartInstance) churnTrendChartInstance.destroy();
+            churnTrendChartInstance = new Chart(document.getElementById('churnTrendChart'), {
+                type: 'line',
+                data: {
+                    labels: trend.map(t => t.date),
+                    datasets: [
+                        {
+                            label: 'High Risk (70+)',
+                            data: trend.map(t => t.high_risk),
+                            borderColor: '#dc3545',
+                            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                            fill: true
+                        },
+                        {
+                            label: 'Medium Risk (40-70)',
+                            data: trend.map(t => t.medium_risk),
+                            borderColor: '#ffc107',
+                            backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                            fill: true
+                        },
+                        {
+                            label: 'Low Risk (0-40)',
+                            data: trend.map(t => t.low_risk),
+                            borderColor: '#28a745',
+                            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        async function loadChurnTrend(days) {
+            try {
+                const res = await fetch(`${API_BASE}/api/churn/trend?days=${days}`);
+                const trend = await res.json();
+                renderChurnTrendChart(trend);
+            } catch (error) {
+                console.error('Error loading churn trend:', error);
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             // Initialize Bootstrap modals
@@ -1446,6 +1829,19 @@
                 if (!mlQualityLoaded) {
                     loadMLQualityData();
                 }
+            });
+
+            // Load Churn Analytics data when tab is shown
+            document.getElementById('churnanalytics-tab').addEventListener('shown.bs.tab', () => {
+                if (!churnAnalyticsLoaded) {
+                    loadChurnAnalytics();
+                    churnAnalyticsLoaded = true;
+                }
+            });
+
+            // Trend days filter
+            document.getElementById('churnTrendDays').addEventListener('change', function() {
+                loadChurnTrend(this.value);
             });
 
             // Also check for pending recommendations on page load (for the badge)
