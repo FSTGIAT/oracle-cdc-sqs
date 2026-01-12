@@ -561,9 +561,23 @@
         <div class="row mb-4">
             <div class="col-12">
                 <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>High Risk Calls (Score >= 70)</span>
-                        <span class="badge bg-danger" id="highRiskCount">0</span>
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span class="fw-bold">High Risk Calls</span>
+                            <!-- Score Range Filter -->
+                            <div class="d-flex align-items-center gap-2">
+                                <label class="form-label mb-0 small text-muted">Score:</label>
+                                <input type="number" id="minScoreFilter" class="form-control form-control-sm"
+                                       style="width: 65px;" min="0" max="100" value="70" placeholder="Min">
+                                <span class="text-muted">-</span>
+                                <input type="number" id="maxScoreFilter" class="form-control form-control-sm"
+                                       style="width: 65px;" min="0" max="100" value="100" placeholder="Max">
+                                <button class="btn btn-sm btn-primary" onclick="loadHighRiskCalls(0)">
+                                    <i class="bi bi-funnel-fill"></i> Filter
+                                </button>
+                            </div>
+                            <span class="badge bg-danger" id="highRiskCount">0</span>
+                        </div>
                     </div>
                     <div class="card-body" style="max-height: 400px; overflow-y: auto;">
                         <table class="table table-sm table-hover" id="highRiskTable">
@@ -580,6 +594,27 @@
                             </thead>
                             <tbody></tbody>
                         </table>
+                    </div>
+                    <!-- Pagination Footer -->
+                    <div class="card-footer bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="text-muted small">
+                                Showing <span id="highRiskShowing">0-0</span> of <span id="highRiskTotal">0</span>
+                            </div>
+                            <nav>
+                                <ul class="pagination pagination-sm mb-0">
+                                    <li class="page-item disabled" id="highRiskPrevPage">
+                                        <a class="page-link" href="#" onclick="changeHighRiskPage(-1); return false;">Previous</a>
+                                    </li>
+                                    <li class="page-item disabled">
+                                        <span class="page-link" id="highRiskPageInfo">1 / 1</span>
+                                    </li>
+                                    <li class="page-item disabled" id="highRiskNextPage">
+                                        <a class="page-link" href="#" onclick="changeHighRiskPage(1); return false;">Next</a>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -647,7 +682,7 @@
                                 <div class="col-md-6">
                                     <div class="detail-item">
                                         <div class="detail-label">Summary</div>
-                                        <div class="detail-value" id="callSummary">-</div>
+                                        <div class="detail-value" id="callSummary" dir="rtl" style="text-align: right;">-</div>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -1731,24 +1766,8 @@
                 // === Trend Chart ===
                 renderChurnTrendChart(trend);
 
-                // === High Risk Table ===
-                document.getElementById('highRiskCount').textContent = highRisk.length;
-                const highRiskBody = document.querySelector('#highRiskTable tbody');
-                highRiskBody.innerHTML = highRisk.map(c => `
-                    <tr class="call-row" onclick="showCallDetails('${escapeHtml(String(c.call_id || ''))}')">
-                        <td><code class="text-primary">${c.call_id || '-'}</code></td>
-                        <td>${c.created || '-'}</td>
-                        <td><span class="badge bg-danger">${c.churn_score || '-'}</span></td>
-                        <td>${c.subscriber_no || '-'}</td>
-                        <td>
-                            <span class="badge ${c.sub_status === 'A' ? 'bg-success' : c.sub_status === 'C' ? 'bg-danger' : 'bg-secondary'}">
-                                ${c.sub_status === 'A' ? 'Active' : c.sub_status === 'C' ? 'Churned' : c.sub_status || 'Unknown'}
-                            </span>
-                        </td>
-                        <td>${c.product_code || '-'}</td>
-                        <td class="summary-preview">${(c.summary || '-').substring(0, 60)}${c.summary?.length > 60 ? '...' : ''}</td>
-                    </tr>
-                `).join('');
+                // === High Risk Table (initial load with defaults) ===
+                renderHighRiskCalls(highRisk);
 
             } catch (error) {
                 console.error('Error loading churn analytics:', error);
@@ -1762,7 +1781,7 @@
             churnTrendChartInstance = new Chart(document.getElementById('churnTrendChart'), {
                 type: 'line',
                 data: {
-                    labels: trend.map(t => t.date),
+                    labels: trend.map(t => t.call_date),
                     datasets: [
                         {
                             label: 'High Risk (70+)',
@@ -1804,6 +1823,83 @@
             } catch (error) {
                 console.error('Error loading churn trend:', error);
             }
+        }
+
+        // ========================================
+        // HIGH RISK CALLS - FILTER & PAGINATION
+        // ========================================
+        let highRiskCurrentPage = 0;
+        let highRiskPageSize = 25;
+        let highRiskTotalPages = 1;
+
+        async function loadHighRiskCalls(page = 0) {
+            const minScore = document.getElementById('minScoreFilter')?.value || 70;
+            const maxScore = document.getElementById('maxScoreFilter')?.value || 100;
+            const offset = page * highRiskPageSize;
+
+            try {
+                const res = await fetch(
+                    `${API_BASE}/api/churn/high-risk-calls?days=7&min_score=${minScore}&max_score=${maxScore}&offset=${offset}&limit=${highRiskPageSize}`
+                );
+                const result = await res.json();
+                renderHighRiskCalls(result);
+            } catch (error) {
+                console.error('Error loading high risk calls:', error);
+            }
+        }
+
+        function changeHighRiskPage(delta) {
+            const newPage = highRiskCurrentPage + delta;
+            if (newPage >= 0 && newPage < highRiskTotalPages) {
+                loadHighRiskCalls(newPage);
+            }
+        }
+
+        function renderHighRiskCalls(result) {
+            // Handle both new format { data: [...], total, ... } and old format (array)
+            const calls = result.data || result;
+            const total = result.total ?? calls.length;
+            const offset = result.offset ?? 0;
+            const limit = result.limit ?? calls.length;
+            const pages = result.pages ?? 1;
+
+            // Update pagination state
+            highRiskCurrentPage = Math.floor(offset / highRiskPageSize);
+            highRiskTotalPages = pages;
+
+            // Update count badge
+            document.getElementById('highRiskCount').textContent = total;
+
+            // Render table
+            const tbody = document.querySelector('#highRiskTable tbody');
+            tbody.innerHTML = calls.map(c => `
+                <tr class="call-row" onclick="showCallDetails('${escapeHtml(String(c.call_id || ''))}')">
+                    <td><code class="text-primary">${c.call_id || '-'}</code></td>
+                    <td>${c.created || '-'}</td>
+                    <td><span class="badge bg-danger">${c.churn_score || '-'}</span></td>
+                    <td>${c.subscriber_no || '-'}</td>
+                    <td>
+                        <span class="badge ${c.sub_status === 'A' ? 'bg-success' : c.sub_status === 'C' ? 'bg-danger' : 'bg-secondary'}">
+                            ${c.sub_status === 'A' ? 'Active' : c.sub_status === 'C' ? 'Churned' : c.sub_status || 'Unknown'}
+                        </span>
+                    </td>
+                    <td>${c.product_code || '-'}</td>
+                    <td class="summary-preview">${(c.summary || '-').substring(0, 60)}${c.summary?.length > 60 ? '...' : ''}</td>
+                </tr>
+            `).join('');
+
+            // Update pagination controls
+            const start = total > 0 ? offset + 1 : 0;
+            const end = Math.min(offset + limit, total);
+            document.getElementById('highRiskShowing').textContent = `${start}-${end}`;
+            document.getElementById('highRiskTotal').textContent = total;
+            document.getElementById('highRiskPageInfo').textContent = `${highRiskCurrentPage + 1} / ${highRiskTotalPages}`;
+
+            // Enable/disable pagination buttons
+            const prevPage = document.getElementById('highRiskPrevPage');
+            const nextPage = document.getElementById('highRiskNextPage');
+            prevPage.classList.toggle('disabled', highRiskCurrentPage === 0);
+            nextPage.classList.toggle('disabled', highRiskCurrentPage >= highRiskTotalPages - 1);
         }
 
         // Initialize

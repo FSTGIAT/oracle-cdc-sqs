@@ -245,7 +245,7 @@ def api_daily():
 
     query = """
         SELECT
-            TO_CHAR(TRUNC(CREATION_DATE), 'YYYY-MM-DD') as date,
+            TO_CHAR(TRUNC(CREATION_DATE), 'YYYY-MM-DD') as call_date,
             COUNT(*) as count,
             ROUND(AVG(SATISFACTION), 2) as avg_satisfaction,
             ROUND(AVG(CHURN_SCORE), 2) as avg_churn
@@ -515,15 +515,15 @@ def api_churn_accuracy():
         WHERE CHURN_SCORE >= 70
     """
 
-    # Query 2: Actual churns - TRUNC only in subquery, not on SUBSCRIBER column
+    # Query 2: Actual churns - single query using || '' pattern
     actual_query = """
         SELECT COUNT(*) as actual_churns
-        FROM SUBSCRIBER
-        WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN (
-            SELECT TRUNC(SUBSCRIBER_NO), BAN
+        FROM SUBSCRIBER a
+        WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
+            SELECT SUBSCRIBER_NO || '' AS SUBSCRIBER_NO, BAN
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= 70
-        ) AND SUB_STATUS = 'C'
+        ) AND a.SUB_STATUS = 'C'
     """
 
     total = execute_single(total_query)
@@ -544,15 +544,16 @@ def api_churn_accuracy():
 @app.route('/api/churn/by-product')
 def api_churn_by_product():
     """Get churn breakdown by product code"""
+    # Single query using || '' pattern
     query = """
-        SELECT PRODUCT_CODE, COUNT(*) as count
-        FROM SUBSCRIBER
-        WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN (
-            SELECT TRUNC(SUBSCRIBER_NO), BAN
+        SELECT a.PRODUCT_CODE, COUNT(*) as count
+        FROM SUBSCRIBER a
+        WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
+            SELECT SUBSCRIBER_NO || '' AS SUBSCRIBER_NO, BAN
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= 70
-        ) AND SUB_STATUS = 'C'
-        GROUP BY PRODUCT_CODE
+        ) AND a.SUB_STATUS = 'C'
+        GROUP BY a.PRODUCT_CODE
         ORDER BY count DESC
     """
     results = execute_query(query)
@@ -578,21 +579,24 @@ def api_churn_by_score_range():
             WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
         """
         pred = execute_single(pred_query, {'min_score': r['min'], 'max_score': r['max']})
+        predictions = pred.get('count', 0) or 0
 
-        # Actual churns - TRUNC only in subquery
+        # Count churned - single query using || '' pattern (no loop)
+        # Only count customers who deactivated within last 90 days
         churn_query = """
             SELECT COUNT(*) as count
-            FROM SUBSCRIBER
-            WHERE (SUBSCRIBER_NO, CUSTOMER_BAN) IN (
-                SELECT TRUNC(SUBSCRIBER_NO), BAN
+            FROM SUBSCRIBER a
+            WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
+                SELECT SUBSCRIBER_NO || '' AS SUBSCRIBER_NO, BAN
                 FROM CONVERSATION_SUMMARY
                 WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
-            ) AND SUB_STATUS = 'C'
+            )
+            AND a.SUB_STATUS = 'C'
+            AND a.SUB_STATUS_DATE > SYSDATE - 90
         """
-        churns = execute_single(churn_query, {'min_score': r['min'], 'max_score': r['max']})
+        churn_result = execute_single(churn_query, {'min_score': r['min'], 'max_score': r['max']})
+        actual_churns = churn_result.get('count', 0) or 0
 
-        predictions = pred.get('count', 0) or 0
-        actual_churns = churns.get('count', 0) or 0
         accuracy = round((actual_churns / predictions * 100), 1) if predictions > 0 else 0
 
         results.append({
@@ -614,7 +618,7 @@ def api_churn_trend():
 
     query = """
         SELECT
-            TO_CHAR(TRUNC(CREATION_DATE), 'YYYY-MM-DD') as date,
+            TO_CHAR(TRUNC(CREATION_DATE), 'YYYY-MM-DD') as call_date,
             COUNT(*) as total_calls,
             COUNT(CASE WHEN CHURN_SCORE >= 70 THEN 1 END) as high_risk,
             COUNT(CASE WHEN CHURN_SCORE >= 40 AND CHURN_SCORE < 70 THEN 1 END) as medium_risk,
@@ -632,11 +636,28 @@ def api_churn_trend():
 
 @app.route('/api/churn/high-risk-calls')
 def api_high_risk_calls():
-    """Get list of high risk calls (score >= 70) with subscriber status"""
-    days = request.args.get('days', 7, type=int)
-    limit = request.args.get('limit', 100, type=int)
+    """Get high risk calls with filter and pagination"""
+    from math import ceil
 
-    query = """
+    days = request.args.get('days', 7, type=int)
+    min_score = request.args.get('min_score', 70, type=int)
+    max_score = request.args.get('max_score', 100, type=int)
+    offset = request.args.get('offset', 0, type=int)
+    limit = request.args.get('limit', 25, type=int)
+
+    # Get total count for pagination
+    count_query = """
+        SELECT COUNT(*) as total FROM CONVERSATION_SUMMARY
+        WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
+        AND CREATION_DATE > SYSDATE - :days
+    """
+    count_result = execute_single(count_query, {
+        'min_score': min_score, 'max_score': max_score, 'days': days
+    })
+    total = count_result.get('total', 0) or 0
+
+    # Single query with LEFT JOIN - no loop, uses || '' pattern
+    calls_query = """
         SELECT
             cs.SOURCE_ID as call_id,
             cs.SOURCE_TYPE as type,
@@ -648,16 +669,29 @@ def api_high_risk_calls():
             s.SUB_STATUS as sub_status,
             s.PRODUCT_CODE as product_code
         FROM CONVERSATION_SUMMARY cs
-        LEFT JOIN SUBSCRIBER s ON TRUNC(cs.SUBSCRIBER_NO) = s.SUBSCRIBER_NO
-                                 AND cs.BAN = s.CUSTOMER_BAN
-        WHERE cs.CHURN_SCORE >= 70
+        LEFT JOIN SUBSCRIBER s
+            ON s.SUBSCRIBER_NO = cs.SUBSCRIBER_NO || ''
+            AND s.CUSTOMER_BAN = cs.BAN
+        WHERE cs.CHURN_SCORE >= :min_score AND cs.CHURN_SCORE <= :max_score
         AND cs.CREATION_DATE > SYSDATE - :days
         ORDER BY cs.CHURN_SCORE DESC, cs.CREATION_DATE DESC
-        FETCH FIRST :limit ROWS ONLY
+        OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
     """
+    results = execute_query(calls_query, {
+        'min_score': min_score,
+        'max_score': max_score,
+        'days': days,
+        'offset': offset,
+        'limit': limit
+    })
 
-    results = execute_query(query, {'days': days, 'limit': limit})
-    return jsonify(results)
+    return jsonify({
+        'data': results,
+        'total': total,
+        'offset': offset,
+        'limit': limit,
+        'pages': ceil(total / limit) if limit > 0 else 1
+    })
 
 
 # ========================================

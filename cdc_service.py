@@ -1043,10 +1043,11 @@ class OracleCDCService:
                     sentiment_value = str(sentiment_raw) if sentiment_raw else 'neutral'
 
                 # Clean JSON arrays to comma-separated values (remove [], {}, "", '')
-                products_val = clean_json_to_csv(result.get('products', ''))
+                # Truncate to 500 chars to avoid ORA-12899 (column limit)
+                products_val = clean_json_to_csv(result.get('products', ''))[:500]
                 # Use specialized extractor for action_items - removes metadata, keeps only action text, max 500 chars
                 action_items_val = extract_action_items_text(result.get('action_items', ''), max_length=500)
-                unresolved_val = clean_json_to_csv(result.get('unresolved_issues', ''))
+                unresolved_val = clean_json_to_csv(result.get('unresolved_issues', ''))[:500]
                 satisfaction_val = result.get('customer_satisfaction', 3)
 
                 # Get churn score (0-100 scale) from embedding-based churn detection
