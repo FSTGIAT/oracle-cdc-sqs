@@ -165,5 +165,36 @@ module.exports = {
       // Uncomment to enable automatic weekly runs
       // cron_restart: '0 8 * * 0',
     },
+
+    // ========================================
+    // Backfill Service - Historical data processing
+    // ========================================
+    {
+      name: 'cdc-backfill',
+      script: PYTHON,
+      args: 'backfill_service.py',
+      cwd: SERVICE_ROOT,
+      interpreter: 'none',
+
+      // One-shot execution (exits when complete)
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: false,
+      watch: false,
+
+      // Allow long-running backfill to complete
+      kill_timeout: 300000,
+
+      // Logging
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      error_file: path.join(LOG_DIR, 'backfill-error.log'),
+      out_file: path.join(LOG_DIR, 'backfill-out.log'),
+      combine_logs: true,
+
+      env: {
+        NODE_ENV: 'production',
+        LOG_LEVEL: 'INFO',
+      },
+    },
   ],
 };
