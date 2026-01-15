@@ -256,12 +256,23 @@ function renderProductsChart(data) {
 
 async function loadAgentPerformance() {
     const ctx = document.getElementById('agentPerformanceChart');
-    if (!ctx) return;
+    if (!ctx) {
+        console.log('Agent performance chart canvas not found');
+        return;
+    }
 
     try {
         const days = getTimeFilterDays();
+        console.log('Loading agent performance for', days, 'days');
         const response = await fetch(`${API_BASE}/api/agent-performance?days=${days}`);
+
+        if (!response.ok) {
+            console.error('Agent performance API error:', response.status, response.statusText);
+            return;
+        }
+
         const data = await response.json();
+        console.log('Agent performance API response:', data);
 
         renderAgentPerformanceChart(data.queues || [], ctx);
 
