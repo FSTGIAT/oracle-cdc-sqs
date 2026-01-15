@@ -163,13 +163,18 @@ async function drillDownHeatmap(dayOfWeek, hour) {
 // ========================================
 
 async function loadProductsBreakdown() {
-    const container = document.getElementById('productsChartContainer');
-    if (!container) return;
+    const ctx = document.getElementById('productsChart');
+    if (!ctx) {
+        console.log('Products chart canvas not found');
+        return;
+    }
 
     try {
         const days = getTimeFilterDays();
+        console.log('Loading products breakdown for', days, 'days');
         const response = await fetch(`${API_BASE}/api/products/daily-breakdown?days=${days}`);
         const data = await response.json();
+        console.log('Products API response:', data);
 
         renderProductsChart(data);
 
@@ -180,7 +185,10 @@ async function loadProductsBreakdown() {
 
 function renderProductsChart(data) {
     const ctx = document.getElementById('productsChart');
-    if (!ctx) return;
+    if (!ctx) {
+        console.log('Products chart canvas not found in render');
+        return;
+    }
 
     if (productsChartInstance) productsChartInstance.destroy();
 
@@ -189,8 +197,14 @@ function renderProductsChart(data) {
     const productsData = data.products || {};
     const productNames = Object.keys(productsData);
 
+    console.log('Products render - dates:', dates.length, 'products:', productNames.length, productNames);
+
     if (dates.length === 0 || productNames.length === 0) {
-        ctx.parentElement.innerHTML = '<div class="text-muted text-center py-4">No products data available</div>';
+        // Don't destroy canvas, just show message in legend area
+        const legendContainer = document.getElementById('productsLegend');
+        if (legendContainer) {
+            legendContainer.innerHTML = '<div class="text-muted">No products data available</div>';
+        }
         return;
     }
 
