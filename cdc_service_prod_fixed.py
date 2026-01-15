@@ -1053,14 +1053,24 @@ class OracleCDCService:
 
                 # FIX: Extended time filter from 2 hours to 7 days to ensure we find the record
                 # Get BAN, SUBSCRIBER_NO, and CALL_TIME from VERINT_TEXT_ANALYSIS
-                cursor.execute("""
-                    SELECT BAN, SUBSCRIBER_NO, CALL_TIME
-                    FROM VERINT_TEXT_ANALYSIS
-                    WHERE CALL_ID = :call_id
-                    AND CALL_TIME > SYSDATE - 90
-                    AND ROWNUM = 1
-                """, {'call_id': call_id})
-                verint_row = cursor.fetchone()
+                # Convert call_id to NUMBER - VERINT.CALL_ID is NUMBER type, but call_id from JSON is string
+                try:
+                    call_id_num = int(call_id) if call_id and str(call_id).isdigit() else None
+                except (ValueError, TypeError):
+                    call_id_num = None
+                    oracle_logger.warning(f"⚠️ Could not convert call_id to number: {call_id}")
+
+                if call_id_num:
+                    cursor.execute("""
+                        SELECT BAN, SUBSCRIBER_NO, CALL_TIME
+                        FROM VERINT_TEXT_ANALYSIS
+                        WHERE CALL_ID = :call_id
+                        AND CALL_TIME > SYSDATE - 90
+                        AND ROWNUM = 1
+                    """, {'call_id': call_id_num})
+                    verint_row = cursor.fetchone()
+                else:
+                    verint_row = None
 
                 ban_val = verint_row[0] if verint_row else None
                 subscriber_no_val = verint_row[1] if verint_row else None

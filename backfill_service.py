@@ -117,36 +117,34 @@ class BackfillService:
             sqs_logger.error(f"SQS connection failed: {e}")
             return False
 
-    def collect_bulk_calls(self) -> List[Dict]:
+    def collect_bulk_call_ids(self) -> List[str]:
         """
-        Phase 1: Full table scan with PARALLEL hint
-        BATCHED query for unprocessed calls (memory efficient)
+        Phase 1: Full table scan with PARALLEL hint - ONE TIME ONLY
+        Returns only CALL_IDs (memory efficient - just strings)
         """
         query = """
         SELECT /*+ FULL(VERINT_TEXT_ANALYSIS) PARALLEL(VERINT_TEXT_ANALYSIS, 4) */
-        DISTINCT CALL_ID, CALL_TIME
+        DISTINCT CALL_ID
         FROM VERINT_TEXT_ANALYSIS
         WHERE CALL_TIME > SYSDATE - :days_back
         AND CALL_ID NOT IN (
             SELECT CALL_ID FROM CDC_PROCESSED_CALLS
             WHERE TEXT_TIME > SYSDATE - :days_back
         )
-        ORDER BY CALL_TIME ASC
-        FETCH FIRST :batch_size ROWS ONLY
         """
 
         try:
-            oracle_logger.info(f"[BULK] Fetching batch of {self.bulk_batch_size} calls...")
+            oracle_logger.info(f"[BULK] Executing ONE-TIME full scan to get all CALL_IDs...")
             cursor = self.oracle_conn.cursor()
-            cursor.execute(query, {'days_back': self.days_back, 'batch_size': self.bulk_batch_size})
+            cursor.execute(query, {'days_back': self.days_back})
 
             rows = cursor.fetchall()
             cursor.close()
 
-            calls = [{'call_id': row[0], 'call_time': row[1]} for row in rows]
-            oracle_logger.info(f"[BULK] Found {len(calls)} calls in this batch")
+            call_ids = [row[0] for row in rows]
+            oracle_logger.info(f"[BULK] Found {len(call_ids)} total CALL_IDs to process")
 
-            return calls
+            return call_ids
 
         except Exception as e:
             oracle_logger.error(f"Bulk query failed: {e}")
@@ -272,7 +270,7 @@ class BackfillService:
             sqs_logger.error(f"SQS send failed: {e}")
             return False
 
-    def mark_processed(self, call_id: str, call_time: datetime) -> bool:
+    def mark_processed(self, call_id: str, call_time: datetime = None) -> bool:
         """Mark call as processed in CDC_PROCESSED_CALLS"""
         try:
             cursor = self.oracle_conn.cursor()
@@ -282,7 +280,7 @@ class BackfillService:
                 ON (target.CALL_ID = source.CALL_ID)
                 WHEN NOT MATCHED THEN
                     INSERT (CALL_ID, TEXT_TIME, PROCESSED_AT)
-                    VALUES (:call_id, :text_time, SYSTIMESTAMP)
+                    VALUES (:call_id, NVL(:text_time, SYSTIMESTAMP), SYSTIMESTAMP)
             """, {
                 'call_id': call_id,
                 'text_time': call_time
@@ -363,24 +361,32 @@ class BackfillService:
             return
 
         try:
-            # Phase 1: BULK - BATCHED full table scan (memory efficient)
+            # Phase 1: BULK - ONE-TIME full scan, then process in batches
             logger.info("")
             logger.info("=" * 40)
-            logger.info(f"PHASE 1: BULK ({self.days_back} days, PARALLEL, batch={self.bulk_batch_size})")
+            logger.info(f"PHASE 1: BULK ({self.days_back} days, PARALLEL)")
             logger.info("=" * 40)
 
-            bulk_batch_num = 0
-            while self.phase == 'BULK':
-                bulk_batch_num += 1
-                bulk_calls = self.collect_bulk_calls()
+            # Get ALL call_ids in ONE query (just IDs - low memory)
+            all_call_ids = self.collect_bulk_call_ids()
 
-                if not bulk_calls:
-                    logger.info("BULK phase complete - no more calls to process")
-                    break
+            if all_call_ids:
+                total_calls = len(all_call_ids)
+                logger.info(f"[BULK] Processing {total_calls} calls in batches of {self.bulk_batch_size}...")
 
-                logger.info(f"[BULK] Processing batch #{bulk_batch_num} ({len(bulk_calls)} calls)...")
-                self.process_batch(bulk_calls)
-                time.sleep(0.5)  # Small pause between batches
+                # Process in batches
+                for i in range(0, total_calls, self.bulk_batch_size):
+                    batch_num = (i // self.bulk_batch_size) + 1
+                    batch_ids = all_call_ids[i:i + self.bulk_batch_size]
+
+                    # Convert to format expected by process_batch
+                    batch_calls = [{'call_id': cid, 'call_time': None} for cid in batch_ids]
+
+                    logger.info(f"[BULK] Batch #{batch_num}: processing {len(batch_ids)} calls ({i+1}-{min(i+len(batch_ids), total_calls)} of {total_calls})...")
+                    self.process_batch(batch_calls)
+                    time.sleep(0.5)
+            else:
+                logger.info("No bulk calls found - skipping to DELTA")
 
             self.phase = 'DELTA'
 
