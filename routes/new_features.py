@@ -280,8 +280,8 @@ def api_agent_performance():
             ROUND(AVG(cs.SATISFACTION), 2) as avg_satisfaction,
             ROUND(AVG(cs.CHURN_SCORE), 1) as avg_churn_score,
             COUNT(CASE WHEN cs.CHURN_SCORE >= 70 THEN 1 END) as high_churn_count,
-            COUNT(CASE WHEN LOWER(cs.SENTIMENT) LIKE '%חיובי%' OR LOWER(cs.SENTIMENT) LIKE '%positive%' THEN 1 END) as positive_count,
-            COUNT(CASE WHEN LOWER(cs.SENTIMENT) LIKE '%שלילי%' OR LOWER(cs.SENTIMENT) LIKE '%negative%' THEN 1 END) as negative_count
+            COUNT(CASE WHEN cs.SATISFACTION >= 4 THEN 1 END) as high_satisfaction_count,
+            COUNT(CASE WHEN cs.SATISFACTION <= 2 THEN 1 END) as low_satisfaction_count
         FROM CONVERSATION_SUMMARY cs
         JOIN VERINT_TEXT_ANALYSIS v ON v.CALL_ID = cs.SOURCE_ID
         WHERE cs.CONVERSATION_TIME > SYSDATE - :days

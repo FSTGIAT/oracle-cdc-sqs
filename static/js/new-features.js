@@ -184,9 +184,15 @@ function renderProductsChart(data) {
 
     if (productsChartInstance) productsChartInstance.destroy();
 
-    // Prepare data for stacked area chart
-    const dates = [...new Set(data.map(d => d.call_date))].sort();
-    const products = [...new Set(data.flatMap(d => d.products || []))];
+    // API returns: { dates: [...], products: { "ProductName": [count1, count2, ...] }, totals_by_product: {...} }
+    const dates = data.dates || [];
+    const productsData = data.products || {};
+    const productNames = Object.keys(productsData);
+
+    if (dates.length === 0 || productNames.length === 0) {
+        ctx.parentElement.innerHTML = '<div class="text-muted text-center py-4">No products data available</div>';
+        return;
+    }
 
     // Color palette for products
     const colors = [
@@ -194,12 +200,9 @@ function renderProductsChart(data) {
         '#17a2b8', '#6c757d', '#fd7e14', '#20c997', '#6610f2'
     ];
 
-    const datasets = products.slice(0, 10).map((product, idx) => ({
+    const datasets = productNames.slice(0, 10).map((product, idx) => ({
         label: product,
-        data: dates.map(date => {
-            const entry = data.find(d => d.call_date === date);
-            return entry?.product_counts?.[product] || 0;
-        }),
+        data: productsData[product] || [],
         backgroundColor: colors[idx % colors.length] + '80',
         borderColor: colors[idx % colors.length],
         fill: true
@@ -221,13 +224,13 @@ function renderProductsChart(data) {
         }
     });
 
-    // Render legend
+    // Render legend with totals
     const legendContainer = document.getElementById('productsLegend');
-    if (legendContainer) {
-        legendContainer.innerHTML = products.slice(0, 10).map((product, idx) => `
+    if (legendContainer && data.totals_by_product) {
+        legendContainer.innerHTML = productNames.slice(0, 10).map((product, idx) => `
             <div class="legend-item">
                 <span class="legend-color" style="background-color: ${colors[idx % colors.length]};"></span>
-                <span>${escapeHtml(product)}</span>
+                <span>${escapeHtml(product)} (${data.totals_by_product[product] || 0})</span>
             </div>
         `).join('');
     }
@@ -238,47 +241,54 @@ function renderProductsChart(data) {
 // ========================================
 
 async function loadAgentPerformance() {
-    const container = document.getElementById('agentPerformanceContainer');
-    if (!container) return;
+    const ctx = document.getElementById('agentPerformanceChart');
+    if (!ctx) return;
 
     try {
         const days = getTimeFilterDays();
         const response = await fetch(`${API_BASE}/api/agent-performance?days=${days}`);
         const data = await response.json();
 
-        renderAgentPerformanceChart(data);
+        renderAgentPerformanceChart(data.queues || [], ctx);
 
     } catch (error) {
         console.error('Error loading agent performance:', error);
     }
 }
 
-function renderAgentPerformanceChart(data) {
-    const ctx = document.getElementById('agentPerformanceChart');
-    if (!ctx) return;
+function renderAgentPerformanceChart(queues, ctx) {
+    if (!ctx) {
+        ctx = document.getElementById('agentPerformanceChart');
+        if (!ctx) return;
+    }
 
     if (agentPerformanceChartInstance) agentPerformanceChartInstance.destroy();
+
+    if (!queues || queues.length === 0) {
+        ctx.parentElement.innerHTML = '<div class="text-muted text-center py-4">No queue data available</div>';
+        return;
+    }
 
     agentPerformanceChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: data.map(d => d.queue_name || 'Unknown'),
+            labels: queues.map(d => d.queue_name || 'Unknown'),
             datasets: [
                 {
                     label: 'Call Count',
-                    data: data.map(d => d.call_count),
+                    data: queues.map(d => d.call_count),
                     backgroundColor: '#0d6efd',
                     yAxisID: 'y'
                 },
                 {
                     label: 'Avg Satisfaction',
-                    data: data.map(d => d.avg_satisfaction),
+                    data: queues.map(d => d.avg_satisfaction),
                     backgroundColor: '#28a745',
                     yAxisID: 'y1'
                 },
                 {
                     label: 'High Churn Count',
-                    data: data.map(d => d.high_churn_count),
+                    data: queues.map(d => d.high_churn_count),
                     backgroundColor: '#dc3545',
                     yAxisID: 'y'
                 }
@@ -302,14 +312,14 @@ function renderAgentPerformanceChart(data) {
                     position: 'top',
                     min: 0,
                     max: 5,
-                    title: { display: true, text: 'Satisfaction' },
+                    title: { display: true, text: 'Satisfaction (1-5)' },
                     grid: { drawOnChartArea: false }
                 }
             },
             onClick: (event, elements) => {
                 if (elements.length > 0) {
                     const index = elements[0].index;
-                    const queueName = data[index].queue_name;
+                    const queueName = queues[index].queue_name;
                     if (queueName) drillDownAgentPerformance(queueName);
                 }
             },
