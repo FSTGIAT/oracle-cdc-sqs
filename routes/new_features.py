@@ -267,27 +267,25 @@ def api_products_daily_breakdown():
 @new_features_bp.route('/agent-performance')
 def api_agent_performance():
     """
-    Get performance metrics by queue/agent group.
-    Uses QUEUE_NAME from VERINT_TEXT_ANALYSIS as proxy for agent teams.
+    Get performance metrics by product type (instead of queue to avoid slow JOIN).
+    Groups calls by PRODUCTS column from CONVERSATION_SUMMARY.
     """
     days = request.args.get('days', 7, type=int)
-    limit = request.args.get('limit', 20, type=int)
+    limit = request.args.get('limit', 15, type=int)
 
+    # Use PRODUCTS column instead of QUEUE_NAME (no slow JOIN needed)
     query = """
         SELECT
-            v.QUEUE_NAME as queue_name,
-            COUNT(DISTINCT cs.SOURCE_ID) as call_count,
-            ROUND(AVG(cs.SATISFACTION), 2) as avg_satisfaction,
-            ROUND(AVG(cs.CHURN_SCORE), 1) as avg_churn_score,
-            COUNT(CASE WHEN cs.CHURN_SCORE >= 70 THEN 1 END) as high_churn_count,
-            COUNT(CASE WHEN cs.SATISFACTION >= 4 THEN 1 END) as high_satisfaction_count,
-            COUNT(CASE WHEN cs.SATISFACTION <= 2 THEN 1 END) as low_satisfaction_count
-        FROM CONVERSATION_SUMMARY cs
-        JOIN VERINT_TEXT_ANALYSIS v ON v.CALL_ID = cs.SOURCE_ID
-        WHERE cs.CONVERSATION_TIME > SYSDATE - :days
-        AND v.CALL_TIME > SYSDATE - 365
-        AND v.QUEUE_NAME IS NOT NULL
-        GROUP BY v.QUEUE_NAME
+            NVL(PRODUCTS, 'Unknown') as queue_name,
+            COUNT(*) as call_count,
+            ROUND(AVG(SATISFACTION), 2) as avg_satisfaction,
+            ROUND(AVG(CHURN_SCORE), 1) as avg_churn_score,
+            COUNT(CASE WHEN CHURN_SCORE >= 70 THEN 1 END) as high_churn_count,
+            COUNT(CASE WHEN SATISFACTION >= 4 THEN 1 END) as high_satisfaction_count,
+            COUNT(CASE WHEN SATISFACTION <= 2 THEN 1 END) as low_satisfaction_count
+        FROM CONVERSATION_SUMMARY
+        WHERE CONVERSATION_TIME > SYSDATE - :days
+        GROUP BY NVL(PRODUCTS, 'Unknown')
         ORDER BY call_count DESC
         FETCH FIRST :limit ROWS ONLY
     """
@@ -303,35 +301,51 @@ def api_agent_performance():
 @new_features_bp.route('/agent-performance/calls')
 def api_agent_performance_calls():
     """
-    Get calls for a specific queue (drill-down from agent performance chart).
+    Get calls for a specific product (drill-down from performance chart).
     """
-    queue_name = request.args.get('queue_name', '')
+    queue_name = request.args.get('queue_name', '')  # Actually product name now
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 50, type=int)
 
-    query = """
-        SELECT
-            cs.SOURCE_ID as call_id,
-            cs.SOURCE_TYPE as type,
-            TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
-            cs.SUMMARY as summary,
-            cs.SENTIMENT as sentiment,
-            cs.SATISFACTION as satisfaction,
-            ROUND(cs.CHURN_SCORE, 1) as churn_score
-        FROM CONVERSATION_SUMMARY cs
-        JOIN VERINT_TEXT_ANALYSIS v ON v.CALL_ID = cs.SOURCE_ID
-        WHERE v.QUEUE_NAME = :queue_name
-        AND cs.CONVERSATION_TIME > SYSDATE - :days
-        AND v.CALL_TIME > SYSDATE - 365
-        ORDER BY cs.CONVERSATION_TIME DESC
-        FETCH FIRST :limit ROWS ONLY
-    """
-
-    results = execute_query(query, {
-        'queue_name': queue_name,
-        'days': days,
-        'limit': limit
-    })
+    # Handle 'Unknown' which means NULL products
+    if queue_name == 'Unknown':
+        query = """
+            SELECT
+                SOURCE_ID as call_id,
+                SOURCE_TYPE as type,
+                TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
+                SUMMARY as summary,
+                SENTIMENT as sentiment,
+                SATISFACTION as satisfaction,
+                ROUND(CHURN_SCORE, 1) as churn_score
+            FROM CONVERSATION_SUMMARY
+            WHERE PRODUCTS IS NULL
+            AND CONVERSATION_TIME > SYSDATE - :days
+            ORDER BY CONVERSATION_TIME DESC
+            FETCH FIRST :limit ROWS ONLY
+        """
+        results = execute_query(query, {'days': days, 'limit': limit})
+    else:
+        query = """
+            SELECT
+                SOURCE_ID as call_id,
+                SOURCE_TYPE as type,
+                TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
+                SUMMARY as summary,
+                SENTIMENT as sentiment,
+                SATISFACTION as satisfaction,
+                ROUND(CHURN_SCORE, 1) as churn_score
+            FROM CONVERSATION_SUMMARY
+            WHERE PRODUCTS = :product_name
+            AND CONVERSATION_TIME > SYSDATE - :days
+            ORDER BY CONVERSATION_TIME DESC
+            FETCH FIRST :limit ROWS ONLY
+        """
+        results = execute_query(query, {
+            'product_name': queue_name,
+            'days': days,
+            'limit': limit
+        })
 
     return jsonify(results)
 
