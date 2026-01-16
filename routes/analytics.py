@@ -20,9 +20,9 @@ def api_summary():
             COUNT(CASE WHEN SOURCE_TYPE='WAPP' THEN 1 END) as whatsapp,
             ROUND(AVG(SATISFACTION), 2) as avg_satisfaction,
             ROUND(AVG(CHURN_SCORE), 2) as avg_churn_score,
-            COUNT(CASE WHEN LOWER(SENTIMENT) LIKE '%חיובי%' OR LOWER(SENTIMENT) LIKE '%positive%' THEN 1 END) as positive,
-            COUNT(CASE WHEN LOWER(SENTIMENT) LIKE '%שלילי%' OR LOWER(SENTIMENT) LIKE '%negative%' THEN 1 END) as negative,
-            COUNT(CASE WHEN LOWER(SENTIMENT) LIKE '%נייטרלי%' OR LOWER(SENTIMENT) LIKE '%neutral%' THEN 1 END) as neutral
+            COUNT(CASE WHEN SENTIMENT >= 4 THEN 1 END) as positive,
+            COUNT(CASE WHEN SENTIMENT <= 2 THEN 1 END) as negative,
+            COUNT(CASE WHEN SENTIMENT = 3 OR SENTIMENT IS NULL THEN 1 END) as neutral
         FROM CONVERSATION_SUMMARY
         WHERE CONVERSATION_TIME > SYSDATE - :days
     """
@@ -58,16 +58,16 @@ def api_sentiment():
     query = """
         SELECT
             CASE
-                WHEN LOWER(SENTIMENT) LIKE '%חיובי%' OR LOWER(SENTIMENT) LIKE '%positive%' THEN 'Positive'
-                WHEN LOWER(SENTIMENT) LIKE '%שלילי%' OR LOWER(SENTIMENT) LIKE '%negative%' THEN 'Negative'
+                WHEN SENTIMENT >= 4 THEN 'Positive'
+                WHEN SENTIMENT <= 2 THEN 'Negative'
                 ELSE 'Neutral'
             END as sentiment,
             COUNT(*) as count
         FROM CONVERSATION_SUMMARY
         WHERE CONVERSATION_TIME > SYSDATE - :days
         GROUP BY CASE
-            WHEN LOWER(SENTIMENT) LIKE '%חיובי%' OR LOWER(SENTIMENT) LIKE '%positive%' THEN 'Positive'
-            WHEN LOWER(SENTIMENT) LIKE '%שלילי%' OR LOWER(SENTIMENT) LIKE '%negative%' THEN 'Negative'
+            WHEN SENTIMENT >= 4 THEN 'Positive'
+            WHEN SENTIMENT <= 2 THEN 'Negative'
             ELSE 'Neutral'
         END
     """

@@ -45,13 +45,13 @@ def api_sentiment_calls():
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 50, type=int)
 
-    # Map sentiment type to query condition
+    # Map sentiment type to query condition (SENTIMENT is numeric 1-5 scale)
     if sentiment_type == 'Positive':
-        sentiment_condition = "(LOWER(SENTIMENT) LIKE '%חיובי%' OR LOWER(SENTIMENT) LIKE '%positive%')"
+        sentiment_condition = "SENTIMENT >= 4"
     elif sentiment_type == 'Negative':
-        sentiment_condition = "(LOWER(SENTIMENT) LIKE '%שלילי%' OR LOWER(SENTIMENT) LIKE '%negative%')"
+        sentiment_condition = "SENTIMENT <= 2"
     else:
-        sentiment_condition = "(SENTIMENT IS NULL OR (LOWER(SENTIMENT) NOT LIKE '%חיובי%' AND LOWER(SENTIMENT) NOT LIKE '%positive%' AND LOWER(SENTIMENT) NOT LIKE '%שלילי%' AND LOWER(SENTIMENT) NOT LIKE '%negative%'))"
+        sentiment_condition = "(SENTIMENT = 3 OR SENTIMENT IS NULL)"
 
     query = f"""
         SELECT
@@ -162,7 +162,7 @@ def api_call_details(call_id):
         status_query = """
             SELECT SUB_STATUS, PRODUCT_CODE
             FROM SUBSCRIBER
-            WHERE SUBSCRIBER_NO = TRUNC(:subscriber_no)
+            WHERE SUBSCRIBER_NO = :subscriber_no || ' '
             AND CUSTOMER_BAN = :ban
         """
         status_result = execute_single(status_query, {

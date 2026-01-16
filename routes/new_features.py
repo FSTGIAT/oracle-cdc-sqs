@@ -109,10 +109,9 @@ def api_trends_comparison():
             COUNT(*) as total_calls,
             ROUND(AVG(SATISFACTION), 2) as avg_satisfaction,
             ROUND(AVG(CHURN_SCORE), 1) as avg_churn_score,
-            COUNT(CASE WHEN LOWER(SENTIMENT) LIKE '%חיובי%' OR LOWER(SENTIMENT) LIKE '%positive%' THEN 1 END) as positive,
-            COUNT(CASE WHEN LOWER(SENTIMENT) LIKE '%שלילי%' OR LOWER(SENTIMENT) LIKE '%negative%' THEN 1 END) as negative,
-            COUNT(CASE WHEN LOWER(SENTIMENT) NOT LIKE '%חיובי%' AND LOWER(SENTIMENT) NOT LIKE '%positive%'
-                       AND LOWER(SENTIMENT) NOT LIKE '%שלילי%' AND LOWER(SENTIMENT) NOT LIKE '%negative%' THEN 1 END) as neutral,
+            COUNT(CASE WHEN SENTIMENT >= 4 THEN 1 END) as positive,
+            COUNT(CASE WHEN SENTIMENT <= 2 THEN 1 END) as negative,
+            COUNT(CASE WHEN SENTIMENT = 3 OR SENTIMENT IS NULL THEN 1 END) as neutral,
             MIN(TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD')) as start_date,
             MAX(TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD')) as end_date
         FROM CONVERSATION_SUMMARY
@@ -126,10 +125,9 @@ def api_trends_comparison():
             COUNT(*) as total_calls,
             ROUND(AVG(SATISFACTION), 2) as avg_satisfaction,
             ROUND(AVG(CHURN_SCORE), 1) as avg_churn_score,
-            COUNT(CASE WHEN LOWER(SENTIMENT) LIKE '%חיובי%' OR LOWER(SENTIMENT) LIKE '%positive%' THEN 1 END) as positive,
-            COUNT(CASE WHEN LOWER(SENTIMENT) LIKE '%שלילי%' OR LOWER(SENTIMENT) LIKE '%negative%' THEN 1 END) as negative,
-            COUNT(CASE WHEN LOWER(SENTIMENT) NOT LIKE '%חיובי%' AND LOWER(SENTIMENT) NOT LIKE '%positive%'
-                       AND LOWER(SENTIMENT) NOT LIKE '%שלילי%' AND LOWER(SENTIMENT) NOT LIKE '%negative%' THEN 1 END) as neutral,
+            COUNT(CASE WHEN SENTIMENT >= 4 THEN 1 END) as positive,
+            COUNT(CASE WHEN SENTIMENT <= 2 THEN 1 END) as negative,
+            COUNT(CASE WHEN SENTIMENT = 3 OR SENTIMENT IS NULL THEN 1 END) as neutral,
             MIN(TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD')) as start_date,
             MAX(TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD')) as end_date
         FROM CONVERSATION_SUMMARY
@@ -267,33 +265,89 @@ def api_products_daily_breakdown():
 @new_features_bp.route('/agent-performance')
 def api_agent_performance():
     """
-    Get performance metrics by product type (instead of queue to avoid slow JOIN).
-    Groups calls by PRODUCTS column from CONVERSATION_SUMMARY.
+    Get performance metrics by product type.
+    Parses comma-separated PRODUCTS column (same pattern as products/daily-breakdown).
     """
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 15, type=int)
 
-    # Use PRODUCTS column instead of QUEUE_NAME (no slow JOIN needed)
+    # Get raw data with metrics per row
     query = """
         SELECT
-            NVL(PRODUCTS, 'Unknown') as queue_name,
-            COUNT(*) as call_count,
-            ROUND(AVG(SATISFACTION), 2) as avg_satisfaction,
-            ROUND(AVG(CHURN_SCORE), 1) as avg_churn_score,
-            COUNT(CASE WHEN CHURN_SCORE >= 70 THEN 1 END) as high_churn_count,
-            COUNT(CASE WHEN SATISFACTION >= 4 THEN 1 END) as high_satisfaction_count,
-            COUNT(CASE WHEN SATISFACTION <= 2 THEN 1 END) as low_satisfaction_count
+            PRODUCTS as products_raw,
+            SATISFACTION,
+            CHURN_SCORE
         FROM CONVERSATION_SUMMARY
         WHERE CONVERSATION_TIME > SYSDATE - :days
-        GROUP BY NVL(PRODUCTS, 'Unknown')
-        ORDER BY call_count DESC
-        FETCH FIRST :limit ROWS ONLY
     """
 
-    results = execute_query(query, {'days': days, 'limit': limit})
+    results = execute_query(query, {'days': days})
+
+    # Parse comma-separated products and aggregate metrics
+    product_stats = defaultdict(lambda: {
+        'call_count': 0,
+        'satisfaction_sum': 0,
+        'satisfaction_count': 0,
+        'churn_sum': 0,
+        'churn_count': 0,
+        'high_churn_count': 0,
+        'high_satisfaction_count': 0,
+        'low_satisfaction_count': 0
+    })
+
+    for row in results:
+        products_raw = row.get('products_raw', '') or ''
+        satisfaction = row.get('satisfaction')
+        churn_score = row.get('churn_score')
+
+        # Parse products (comma-separated or single value)
+        if products_raw and ',' in products_raw:
+            products = [p.strip() for p in products_raw.split(',') if p.strip()]
+        elif products_raw and products_raw.strip():
+            products = [products_raw.strip()]
+        else:
+            products = ['Unknown']
+
+        for product in products:
+            stats = product_stats[product]
+            stats['call_count'] += 1
+
+            if satisfaction is not None:
+                stats['satisfaction_sum'] += satisfaction
+                stats['satisfaction_count'] += 1
+                if satisfaction >= 4:
+                    stats['high_satisfaction_count'] += 1
+                elif satisfaction <= 2:
+                    stats['low_satisfaction_count'] += 1
+
+            if churn_score is not None:
+                stats['churn_sum'] += churn_score
+                stats['churn_count'] += 1
+                if churn_score >= 70:
+                    stats['high_churn_count'] += 1
+
+    # Build response sorted by call_count
+    queues = []
+    for product, stats in product_stats.items():
+        avg_satisfaction = round(stats['satisfaction_sum'] / stats['satisfaction_count'], 2) if stats['satisfaction_count'] > 0 else None
+        avg_churn = round(stats['churn_sum'] / stats['churn_count'], 1) if stats['churn_count'] > 0 else None
+
+        queues.append({
+            'queue_name': product,
+            'call_count': stats['call_count'],
+            'avg_satisfaction': avg_satisfaction,
+            'avg_churn_score': avg_churn,
+            'high_churn_count': stats['high_churn_count'],
+            'high_satisfaction_count': stats['high_satisfaction_count'],
+            'low_satisfaction_count': stats['low_satisfaction_count']
+        })
+
+    # Sort by call_count descending and limit
+    queues.sort(key=lambda x: x['call_count'], reverse=True)
+    queues = queues[:limit]
 
     return jsonify({
-        'queues': results,
+        'queues': queues,
         'days': days
     })
 
@@ -307,7 +361,7 @@ def api_agent_performance_calls():
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 50, type=int)
 
-    # Handle 'Unknown' which means NULL products
+    # Handle 'Unknown' which means NULL or empty products
     if queue_name == 'Unknown':
         query = """
             SELECT
@@ -319,13 +373,14 @@ def api_agent_performance_calls():
                 SATISFACTION as satisfaction,
                 ROUND(CHURN_SCORE, 1) as churn_score
             FROM CONVERSATION_SUMMARY
-            WHERE PRODUCTS IS NULL
+            WHERE (PRODUCTS IS NULL OR TRIM(PRODUCTS) IS NULL)
             AND CONVERSATION_TIME > SYSDATE - :days
             ORDER BY CONVERSATION_TIME DESC
             FETCH FIRST :limit ROWS ONLY
         """
         results = execute_query(query, {'days': days, 'limit': limit})
     else:
+        # Use LIKE to match product in comma-separated PRODUCTS column
         query = """
             SELECT
                 SOURCE_ID as call_id,
@@ -336,13 +391,19 @@ def api_agent_performance_calls():
                 SATISFACTION as satisfaction,
                 ROUND(CHURN_SCORE, 1) as churn_score
             FROM CONVERSATION_SUMMARY
-            WHERE PRODUCTS = :product_name
+            WHERE (PRODUCTS = :product_name
+                   OR PRODUCTS LIKE :product_start
+                   OR PRODUCTS LIKE :product_middle
+                   OR PRODUCTS LIKE :product_end)
             AND CONVERSATION_TIME > SYSDATE - :days
             ORDER BY CONVERSATION_TIME DESC
             FETCH FIRST :limit ROWS ONLY
         """
         results = execute_query(query, {
             'product_name': queue_name,
+            'product_start': queue_name + ',%',
+            'product_middle': '%, ' + queue_name + ',%',
+            'product_end': '%, ' + queue_name,
             'days': days,
             'limit': limit
         })
@@ -367,17 +428,18 @@ def api_customer_journey():
         return jsonify({'error': 'subscriber_no or ban is required'}), 400
 
     # Build condition based on provided params
+    # Use SUBSCRIBER_NO || ' ' to convert NUMBER to VARCHAR for string matching
     if subscriber_no and ban:
-        condition = "(cs.SUBSCRIBER_NO = :subscriber_no OR cs.BAN = :ban)"
+        condition = "(cs.SUBSCRIBER_NO || ' ' = :subscriber_no OR cs.BAN = :ban)"
         params = {'subscriber_no': subscriber_no, 'ban': ban}
     elif subscriber_no:
-        condition = "cs.SUBSCRIBER_NO = :subscriber_no"
+        condition = "cs.SUBSCRIBER_NO || ' ' = :subscriber_no"
         params = {'subscriber_no': subscriber_no}
     else:
         condition = "cs.BAN = :ban"
         params = {'ban': ban}
 
-    # Get customer interactions
+    # Get customer interactions from CONVERSATION_SUMMARY only
     query = f"""
         SELECT
             cs.SOURCE_ID as source_id,
@@ -388,7 +450,7 @@ def api_customer_journey():
             cs.SATISFACTION as satisfaction,
             SUBSTR(cs.SUMMARY, 1, 200) as summary,
             cs.PRODUCTS as products,
-            cs.SUBSCRIBER_NO as subscriber_no,
+            cs.SUBSCRIBER_NO || ' ' as subscriber_no,
             cs.BAN as ban
         FROM CONVERSATION_SUMMARY cs
         WHERE {condition}
@@ -423,19 +485,37 @@ def api_customer_journey():
             for r in results:
                 r['categories'] = cat_map.get(r['source_id'], [])
 
-    # Get subscriber status
+    # Get subscriber status from SUBSCRIBER table
+    # Match pattern from dashboard.py - use subscriber_no as string
     status_info = None
     if subscriber_no or ban:
-        status_query = """
-            SELECT SUB_STATUS, PRODUCT_CODE
-            FROM SUBSCRIBER
-            WHERE SUBSCRIBER_NO = :subscriber_no OR CUSTOMER_BAN = :ban
-            FETCH FIRST 1 ROW ONLY
-        """
-        status_info = execute_single(status_query, {
-            'subscriber_no': subscriber_no or '',
-            'ban': ban or ''
-        })
+        if subscriber_no and ban:
+            status_query = """
+                SELECT SUB_STATUS, PRODUCT_CODE
+                FROM SUBSCRIBER
+                WHERE SUBSCRIBER_NO = :subscriber_no AND CUSTOMER_BAN = :ban
+                FETCH FIRST 1 ROW ONLY
+            """
+            status_info = execute_single(status_query, {
+                'subscriber_no': subscriber_no,
+                'ban': ban
+            })
+        elif subscriber_no:
+            status_query = """
+                SELECT SUB_STATUS, PRODUCT_CODE
+                FROM SUBSCRIBER
+                WHERE SUBSCRIBER_NO = :subscriber_no
+                FETCH FIRST 1 ROW ONLY
+            """
+            status_info = execute_single(status_query, {'subscriber_no': subscriber_no})
+        else:
+            status_query = """
+                SELECT SUB_STATUS, PRODUCT_CODE
+                FROM SUBSCRIBER
+                WHERE CUSTOMER_BAN = :ban
+                FETCH FIRST 1 ROW ONLY
+            """
+            status_info = execute_single(status_query, {'ban': ban})
 
     return jsonify({
         'customer': {

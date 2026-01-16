@@ -165,16 +165,13 @@ async function drillDownHeatmap(dayOfWeek, hour) {
 async function loadProductsBreakdown() {
     const ctx = document.getElementById('productsChart');
     if (!ctx) {
-        console.log('Products chart canvas not found');
         return;
     }
 
     try {
         const days = getTimeFilterDays();
-        console.log('Loading products breakdown for', days, 'days');
         const response = await fetch(`${API_BASE}/api/products/daily-breakdown?days=${days}`);
         const data = await response.json();
-        console.log('Products API response:', data);
 
         renderProductsChart(data);
 
@@ -185,22 +182,15 @@ async function loadProductsBreakdown() {
 
 function renderProductsChart(data) {
     const ctx = document.getElementById('productsChart');
-    if (!ctx) {
-        console.log('Products chart canvas not found in render');
-        return;
-    }
+    if (!ctx) return;
 
     if (productsChartInstance) productsChartInstance.destroy();
 
-    // API returns: { dates: [...], products: { "ProductName": [count1, count2, ...] }, totals_by_product: {...} }
     const dates = data.dates || [];
     const productsData = data.products || {};
-    const productNames = Object.keys(productsData);
+    const totals = data.totals_by_product || {};
 
-    console.log('Products render - dates:', dates.length, 'products:', productNames.length, productNames);
-
-    if (dates.length === 0 || productNames.length === 0) {
-        // Don't destroy canvas, just show message in legend area
+    if (dates.length === 0 || Object.keys(productsData).length === 0) {
         const legendContainer = document.getElementById('productsLegend');
         if (legendContainer) {
             legendContainer.innerHTML = '<div class="text-muted">No products data available</div>';
@@ -208,18 +198,23 @@ function renderProductsChart(data) {
         return;
     }
 
-    // Color palette for products
-    const colors = [
-        '#667eea', '#764ba2', '#28a745', '#ffc107', '#dc3545',
-        '#17a2b8', '#6c757d', '#fd7e14', '#20c997', '#6610f2'
-    ];
+    // Sort by total and take top 3 only for cleaner view
+    const topProducts = Object.entries(totals)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name]) => name);
 
-    const datasets = productNames.slice(0, 10).map((product, idx) => ({
+    // Clean distinct colors for top 3
+    const colors = ['#0d6efd', '#198754', '#fd7e14'];
+
+    const datasets = topProducts.map((product, idx) => ({
         label: product,
         data: productsData[product] || [],
-        backgroundColor: colors[idx % colors.length] + '80',
-        borderColor: colors[idx % colors.length],
-        fill: true
+        borderColor: colors[idx],
+        backgroundColor: colors[idx] + '20',
+        borderWidth: 2,
+        fill: false,
+        tension: 0.3
     }));
 
     productsChartInstance = new Chart(ctx, {
@@ -229,24 +224,24 @@ function renderProductsChart(data) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'bottom' }
+                legend: {
+                    position: 'top',
+                    labels: { boxWidth: 12, padding: 8 }
+                }
             },
             scales: {
-                x: { stacked: true },
-                y: { stacked: true, beginAtZero: true }
+                x: {
+                    ticks: { maxTicksLimit: 7 }
+                },
+                y: { beginAtZero: true }
             }
         }
     });
 
-    // Render legend with totals
+    // Clear custom legend - using chart legend instead
     const legendContainer = document.getElementById('productsLegend');
-    if (legendContainer && data.totals_by_product) {
-        legendContainer.innerHTML = productNames.slice(0, 10).map((product, idx) => `
-            <div class="legend-item">
-                <span class="legend-color" style="background-color: ${colors[idx % colors.length]};"></span>
-                <span>${escapeHtml(product)} (${data.totals_by_product[product] || 0})</span>
-            </div>
-        `).join('');
+    if (legendContainer) {
+        legendContainer.innerHTML = '';
     }
 }
 
@@ -282,40 +277,54 @@ async function loadAgentPerformance() {
 }
 
 function renderAgentPerformanceChart(queues, ctx) {
+    console.log('renderAgentPerformanceChart called with', queues?.length, 'queues');
+    console.log('First queue item:', queues?.[0]);
+
     if (!ctx) {
         ctx = document.getElementById('agentPerformanceChart');
-        if (!ctx) return;
+        if (!ctx) {
+            console.log('Canvas not found');
+            return;
+        }
     }
 
-    if (agentPerformanceChartInstance) agentPerformanceChartInstance.destroy();
+    if (agentPerformanceChartInstance) {
+        agentPerformanceChartInstance.destroy();
+        console.log('Destroyed previous chart instance');
+    }
 
     if (!queues || queues.length === 0) {
-        ctx.parentElement.innerHTML = '<div class="text-muted text-center py-4">No queue data available</div>';
+        console.log('No queues data');
+        const legendContainer = document.getElementById('productsLegend');
+        if (legendContainer) {
+            legendContainer.innerHTML = '<div class="text-muted">No performance data available</div>';
+        }
         return;
     }
+
+    // Simple horizontal bar chart showing call count by product
+    const labels = queues.map(d => d.queue_name || 'Unknown');
+    const callCounts = queues.map(d => d.call_count || 0);
+    const avgSatisfaction = queues.map(d => d.avg_satisfaction || 0);
+    const highChurnCounts = queues.map(d => d.high_churn_count || 0);
+
+    console.log('Chart labels:', labels);
+    console.log('Chart callCounts:', callCounts);
 
     agentPerformanceChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: queues.map(d => d.queue_name || 'Unknown'),
+            labels: labels,
             datasets: [
                 {
-                    label: 'Call Count',
-                    data: queues.map(d => d.call_count),
-                    backgroundColor: '#0d6efd',
-                    yAxisID: 'y'
+                    label: 'Calls',
+                    data: callCounts,
+                    backgroundColor: '#0d6efd'
                 },
                 {
-                    label: 'Avg Satisfaction',
-                    data: queues.map(d => d.avg_satisfaction),
-                    backgroundColor: '#28a745',
-                    yAxisID: 'y1'
-                },
-                {
-                    label: 'High Churn Count',
-                    data: queues.map(d => d.high_churn_count),
-                    backgroundColor: '#dc3545',
-                    yAxisID: 'y'
+                    label: 'High Churn',
+                    data: highChurnCounts,
+                    backgroundColor: '#dc3545'
                 }
             ]
         },
@@ -327,19 +336,7 @@ function renderAgentPerformanceChart(queues, ctx) {
                 legend: { position: 'top' }
             },
             scales: {
-                y: {
-                    type: 'linear',
-                    position: 'bottom',
-                    title: { display: true, text: 'Count' }
-                },
-                y1: {
-                    type: 'linear',
-                    position: 'top',
-                    min: 0,
-                    max: 5,
-                    title: { display: true, text: 'Satisfaction (1-5)' },
-                    grid: { drawOnChartArea: false }
-                }
+                x: { beginAtZero: true }
             },
             onClick: (event, elements) => {
                 if (elements.length > 0) {
@@ -347,12 +344,11 @@ function renderAgentPerformanceChart(queues, ctx) {
                     const queueName = queues[index].queue_name;
                     if (queueName) drillDownAgentPerformance(queueName);
                 }
-            },
-            onHover: (event, elements) => {
-                event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
             }
         }
     });
+
+    console.log('Agent performance chart created');
 }
 
 async function drillDownAgentPerformance(queueName) {
