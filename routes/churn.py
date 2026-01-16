@@ -19,12 +19,12 @@ def api_churn_accuracy():
         WHERE CHURN_SCORE >= 70
     """
 
-    # Query 2: Actual churns - single query using || '' pattern
+    # Query 2: Actual churns - use TO_CHAR for type conversion
     actual_query = """
         SELECT COUNT(*) as actual_churns
         FROM SUBSCRIBER a
         WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
-            SELECT SUBSCRIBER_NO || '' AS SUBSCRIBER_NO, BAN
+            SELECT TO_CHAR(SUBSCRIBER_NO), BAN
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= 70
         ) AND a.SUB_STATUS = 'C'
@@ -48,12 +48,11 @@ def api_churn_accuracy():
 @churn_bp.route('/by-product')
 def api_churn_by_product():
     """Get churn breakdown by product code"""
-    # Single query using || '' pattern
     query = """
         SELECT a.PRODUCT_CODE, COUNT(*) as count
         FROM SUBSCRIBER a
         WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
-            SELECT SUBSCRIBER_NO || '' AS SUBSCRIBER_NO, BAN
+            SELECT TO_CHAR(SUBSCRIBER_NO), BAN
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= 70
         ) AND a.SUB_STATUS = 'C'
@@ -61,7 +60,7 @@ def api_churn_by_product():
         ORDER BY count DESC
     """
     results = execute_query(query)
-    return jsonify(results)
+    return jsonify(results if results else [])
 
 
 @churn_bp.route('/by-score-range')
@@ -85,13 +84,12 @@ def api_churn_by_score_range():
         pred = execute_single(pred_query, {'min_score': r['min'], 'max_score': r['max']})
         predictions = pred.get('count', 0) or 0
 
-        # Count churned - single query using || '' pattern (no loop)
-        # Only count customers who deactivated within last 90 days
+        # Count churned - use TO_CHAR for type conversion
         churn_query = """
             SELECT COUNT(*) as count
             FROM SUBSCRIBER a
             WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
-                SELECT SUBSCRIBER_NO || '' AS SUBSCRIBER_NO, BAN
+                SELECT TO_CHAR(SUBSCRIBER_NO), BAN
                 FROM CONVERSATION_SUMMARY
                 WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
             )
@@ -165,14 +163,14 @@ def api_high_risk_calls():
             cs.SOURCE_TYPE as type,
             TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
             cs.CHURN_SCORE as churn_score,
-            cs.SUBSCRIBER_NO as subscriber_no,
+            cs.SUBSCRIBER_NO || ' ' as subscriber_no,
             cs.BAN as ban,
             SUBSTR(cs.SUMMARY, 1, 100) as summary,
             s.SUB_STATUS as sub_status,
             s.PRODUCT_CODE as product_code
         FROM CONVERSATION_SUMMARY cs
         LEFT JOIN SUBSCRIBER s
-            ON s.SUBSCRIBER_NO = cs.SUBSCRIBER_NO || ''
+            ON s.SUBSCRIBER_NO = TO_CHAR(cs.SUBSCRIBER_NO)
             AND s.CUSTOMER_BAN = cs.BAN
         WHERE cs.CHURN_SCORE >= :min_score AND cs.CHURN_SCORE <= :max_score
         AND cs.CONVERSATION_TIME > SYSDATE - :days
