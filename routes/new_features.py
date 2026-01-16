@@ -266,88 +266,32 @@ def api_products_daily_breakdown():
 def api_agent_performance():
     """
     Get performance metrics by product type.
-    Parses comma-separated PRODUCTS column (same pattern as products/daily-breakdown).
+    Groups by PRODUCTS column from CONVERSATION_SUMMARY.
     """
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 15, type=int)
 
-    # Get raw data with metrics per row
+    # Simple SQL aggregation by PRODUCTS
     query = """
         SELECT
-            PRODUCTS as products_raw,
-            SATISFACTION,
-            CHURN_SCORE
+            NVL(PRODUCTS, 'Unknown') as queue_name,
+            COUNT(*) as call_count,
+            ROUND(AVG(SATISFACTION), 2) as avg_satisfaction,
+            ROUND(AVG(CHURN_SCORE), 1) as avg_churn_score,
+            COUNT(CASE WHEN CHURN_SCORE >= 70 THEN 1 END) as high_churn_count,
+            COUNT(CASE WHEN SATISFACTION >= 4 THEN 1 END) as high_satisfaction_count,
+            COUNT(CASE WHEN SATISFACTION <= 2 THEN 1 END) as low_satisfaction_count
         FROM CONVERSATION_SUMMARY
         WHERE CONVERSATION_TIME > SYSDATE - :days
+        GROUP BY NVL(PRODUCTS, 'Unknown')
+        ORDER BY call_count DESC
+        FETCH FIRST :limit ROWS ONLY
     """
 
-    results = execute_query(query, {'days': days})
-
-    # Parse comma-separated products and aggregate metrics
-    product_stats = defaultdict(lambda: {
-        'call_count': 0,
-        'satisfaction_sum': 0,
-        'satisfaction_count': 0,
-        'churn_sum': 0,
-        'churn_count': 0,
-        'high_churn_count': 0,
-        'high_satisfaction_count': 0,
-        'low_satisfaction_count': 0
-    })
-
-    for row in results:
-        products_raw = row.get('products_raw', '') or ''
-        satisfaction = row.get('satisfaction')
-        churn_score = row.get('churn_score')
-
-        # Parse products (comma-separated or single value)
-        if products_raw and ',' in products_raw:
-            products = [p.strip() for p in products_raw.split(',') if p.strip()]
-        elif products_raw and products_raw.strip():
-            products = [products_raw.strip()]
-        else:
-            products = ['Unknown']
-
-        for product in products:
-            stats = product_stats[product]
-            stats['call_count'] += 1
-
-            if satisfaction is not None:
-                stats['satisfaction_sum'] += satisfaction
-                stats['satisfaction_count'] += 1
-                if satisfaction >= 4:
-                    stats['high_satisfaction_count'] += 1
-                elif satisfaction <= 2:
-                    stats['low_satisfaction_count'] += 1
-
-            if churn_score is not None:
-                stats['churn_sum'] += churn_score
-                stats['churn_count'] += 1
-                if churn_score >= 70:
-                    stats['high_churn_count'] += 1
-
-    # Build response sorted by call_count
-    queues = []
-    for product, stats in product_stats.items():
-        avg_satisfaction = round(stats['satisfaction_sum'] / stats['satisfaction_count'], 2) if stats['satisfaction_count'] > 0 else None
-        avg_churn = round(stats['churn_sum'] / stats['churn_count'], 1) if stats['churn_count'] > 0 else None
-
-        queues.append({
-            'queue_name': product,
-            'call_count': stats['call_count'],
-            'avg_satisfaction': avg_satisfaction,
-            'avg_churn_score': avg_churn,
-            'high_churn_count': stats['high_churn_count'],
-            'high_satisfaction_count': stats['high_satisfaction_count'],
-            'low_satisfaction_count': stats['low_satisfaction_count']
-        })
-
-    # Sort by call_count descending and limit
-    queues.sort(key=lambda x: x['call_count'], reverse=True)
-    queues = queues[:limit]
+    results = execute_query(query, {'days': days, 'limit': limit})
 
     return jsonify({
-        'queues': queues,
+        'queues': results if results else [],
         'days': days
     })
 
@@ -357,11 +301,14 @@ def api_agent_performance_calls():
     """
     Get calls for a specific product (drill-down from performance chart).
     """
-    queue_name = request.args.get('queue_name', '')  # Actually product name now
+    queue_name = request.args.get('queue_name', '')
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 50, type=int)
 
-    # Handle 'Unknown' which means NULL or empty products
+    if not queue_name:
+        return jsonify([])
+
+    # Handle 'Unknown' which means NULL products
     if queue_name == 'Unknown':
         query = """
             SELECT
@@ -373,14 +320,14 @@ def api_agent_performance_calls():
                 SATISFACTION as satisfaction,
                 ROUND(CHURN_SCORE, 1) as churn_score
             FROM CONVERSATION_SUMMARY
-            WHERE (PRODUCTS IS NULL OR TRIM(PRODUCTS) IS NULL)
+            WHERE PRODUCTS IS NULL
             AND CONVERSATION_TIME > SYSDATE - :days
             ORDER BY CONVERSATION_TIME DESC
             FETCH FIRST :limit ROWS ONLY
         """
         results = execute_query(query, {'days': days, 'limit': limit})
     else:
-        # Use LIKE to match product in comma-separated PRODUCTS column
+        # Match exact product or product in comma-separated list
         query = """
             SELECT
                 SOURCE_ID as call_id,
@@ -391,24 +338,18 @@ def api_agent_performance_calls():
                 SATISFACTION as satisfaction,
                 ROUND(CHURN_SCORE, 1) as churn_score
             FROM CONVERSATION_SUMMARY
-            WHERE (PRODUCTS = :product_name
-                   OR PRODUCTS LIKE :product_start
-                   OR PRODUCTS LIKE :product_middle
-                   OR PRODUCTS LIKE :product_end)
+            WHERE PRODUCTS = :product_name
             AND CONVERSATION_TIME > SYSDATE - :days
             ORDER BY CONVERSATION_TIME DESC
             FETCH FIRST :limit ROWS ONLY
         """
         results = execute_query(query, {
             'product_name': queue_name,
-            'product_start': queue_name + ',%',
-            'product_middle': '%, ' + queue_name + ',%',
-            'product_end': '%, ' + queue_name,
             'days': days,
             'limit': limit
         })
 
-    return jsonify(results)
+    return jsonify(results if results else [])
 
 
 # ========================================
@@ -428,12 +369,12 @@ def api_customer_journey():
         return jsonify({'error': 'subscriber_no or ban is required'}), 400
 
     # Build condition based on provided params
-    # Use SUBSCRIBER_NO || ' ' to convert NUMBER to VARCHAR for string matching
+    # Use TO_CHAR for NUMBER to VARCHAR conversion
     if subscriber_no and ban:
-        condition = "(cs.SUBSCRIBER_NO || ' ' = :subscriber_no OR cs.BAN = :ban)"
+        condition = "(TO_CHAR(cs.SUBSCRIBER_NO) = :subscriber_no OR cs.BAN = :ban)"
         params = {'subscriber_no': subscriber_no, 'ban': ban}
     elif subscriber_no:
-        condition = "cs.SUBSCRIBER_NO || ' ' = :subscriber_no"
+        condition = "TO_CHAR(cs.SUBSCRIBER_NO) = :subscriber_no"
         params = {'subscriber_no': subscriber_no}
     else:
         condition = "cs.BAN = :ban"

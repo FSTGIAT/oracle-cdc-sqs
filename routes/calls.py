@@ -162,7 +162,7 @@ def api_call_details(call_id):
         status_query = """
             SELECT SUB_STATUS, PRODUCT_CODE
             FROM SUBSCRIBER
-            WHERE SUBSCRIBER_NO = :subscriber_no || ' '
+            WHERE SUBSCRIBER_NO = :subscriber_no
             AND CUSTOMER_BAN = :ban
         """
         status_result = execute_single(status_query, {
