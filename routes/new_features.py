@@ -190,26 +190,10 @@ def api_trends_comparison():
 # 3. PRODUCTS BREAKDOWN BY DAY
 # ========================================
 
-def is_valid_product(product):
-    """Filter out garbage product names"""
-    if not product:
-        return False
-    p = product.lower().strip()
-    # Filter garbage patterns
-    garbage = ['none', 'null', 'price:', 'unknown', 'n/a', '-', '']
-    if any(g in p for g in garbage):
-        return False
-    # Must be at least 2 chars
-    if len(p) < 2:
-        return False
-    return True
-
-
 @new_features_bp.route('/products/daily-breakdown')
 def api_products_daily_breakdown():
     """
     Get products mentioned in calls, broken down by day.
-    Parses comma-separated PRODUCTS column.
     """
     days = request.args.get('days', 30, type=int)
 
@@ -250,15 +234,14 @@ def api_products_daily_breakdown():
             products = [products_raw.strip()] if products_raw.strip() else []
 
         for product in products:
-            # Filter garbage products
-            if is_valid_product(product):
+            if product:
                 products_by_date[call_date][product] += count
                 total_by_product[product] += count
 
     # Sort dates
     sorted_dates = sorted(dates_set)
 
-    # Get top 5 valid products
+    # Get top 5 products
     top_products = sorted(total_by_product.keys(), key=lambda x: total_by_product[x], reverse=True)[:5]
 
     # Build time series for each product
@@ -269,7 +252,7 @@ def api_products_daily_breakdown():
     return jsonify({
         'dates': sorted_dates,
         'products': products_data,
-        'totals_by_product': {k: v for k, v in total_by_product.items() if is_valid_product(k)}
+        'totals_by_product': dict(total_by_product)
     })
 
 
@@ -286,7 +269,6 @@ def api_agent_performance():
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 10, type=int)
 
-    # Filter valid products only (exclude NULL, None, garbage)
     query = """
         SELECT
             PRODUCTS as queue_name,
@@ -297,9 +279,6 @@ def api_agent_performance():
         WHERE CONVERSATION_TIME > SYSDATE - :days
         AND PRODUCTS IS NOT NULL
         AND TRIM(PRODUCTS) IS NOT NULL
-        AND LOWER(PRODUCTS) NOT LIKE '%none%'
-        AND LOWER(PRODUCTS) NOT LIKE '%price:%'
-        AND LENGTH(TRIM(PRODUCTS)) > 2
         GROUP BY PRODUCTS
         ORDER BY call_count DESC
         FETCH FIRST :limit ROWS ONLY
@@ -307,15 +286,8 @@ def api_agent_performance():
 
     results = execute_query(query, {'days': days, 'limit': limit})
 
-    # Filter any remaining garbage in Python
-    clean_results = []
-    for r in (results or []):
-        name = r.get('queue_name', '')
-        if name and is_valid_product(name):
-            clean_results.append(r)
-
     return jsonify({
-        'queues': clean_results,
+        'queues': results if results else [],
         'days': days
     })
 
