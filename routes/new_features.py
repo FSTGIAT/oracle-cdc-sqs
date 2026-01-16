@@ -190,6 +190,21 @@ def api_trends_comparison():
 # 3. PRODUCTS BREAKDOWN BY DAY
 # ========================================
 
+def is_valid_product(product):
+    """Filter out garbage product names"""
+    if not product:
+        return False
+    p = product.lower().strip()
+    # Filter garbage patterns
+    garbage = ['none', 'null', 'price:', 'unknown', 'n/a', '-', '']
+    if any(g in p for g in garbage):
+        return False
+    # Must be at least 2 chars
+    if len(p) < 2:
+        return False
+    return True
+
+
 @new_features_bp.route('/products/daily-breakdown')
 def api_products_daily_breakdown():
     """
@@ -214,14 +229,13 @@ def api_products_daily_breakdown():
     results = execute_query(query, {'days': days})
 
     # Parse and aggregate products by date
-    # products_raw could be comma-separated like "Internet, Mobile" or JSON
     dates_set = set()
     products_by_date = defaultdict(lambda: defaultdict(int))
     total_by_product = defaultdict(int)
 
     for row in results:
         call_date = row.get('call_date')
-        products_raw = row.get('products_raw', '')
+        products_raw = row.get('products_raw', '') or ''
         count = row.get('count', 0) or 0
 
         if not call_date or not products_raw:
@@ -236,15 +250,16 @@ def api_products_daily_breakdown():
             products = [products_raw.strip()] if products_raw.strip() else []
 
         for product in products:
-            if product:
+            # Filter garbage products
+            if is_valid_product(product):
                 products_by_date[call_date][product] += count
                 total_by_product[product] += count
 
     # Sort dates
     sorted_dates = sorted(dates_set)
 
-    # Get top products
-    top_products = sorted(total_by_product.keys(), key=lambda x: total_by_product[x], reverse=True)[:10]
+    # Get top 5 valid products
+    top_products = sorted(total_by_product.keys(), key=lambda x: total_by_product[x], reverse=True)[:5]
 
     # Build time series for each product
     products_data = {}
@@ -254,7 +269,7 @@ def api_products_daily_breakdown():
     return jsonify({
         'dates': sorted_dates,
         'products': products_data,
-        'totals_by_product': dict(total_by_product)
+        'totals_by_product': {k: v for k, v in total_by_product.items() if is_valid_product(k)}
     })
 
 
@@ -266,32 +281,41 @@ def api_products_daily_breakdown():
 def api_agent_performance():
     """
     Get performance metrics by product type.
-    Groups by PRODUCTS column from CONVERSATION_SUMMARY.
+    Shows avg satisfaction and churn risk by product.
     """
     days = request.args.get('days', 7, type=int)
-    limit = request.args.get('limit', 15, type=int)
+    limit = request.args.get('limit', 10, type=int)
 
-    # Simple SQL aggregation by PRODUCTS
+    # Filter valid products only (exclude NULL, None, garbage)
     query = """
         SELECT
-            NVL(PRODUCTS, 'Unknown') as queue_name,
+            PRODUCTS as queue_name,
             COUNT(*) as call_count,
-            ROUND(AVG(SATISFACTION), 2) as avg_satisfaction,
-            ROUND(AVG(CHURN_SCORE), 1) as avg_churn_score,
-            COUNT(CASE WHEN CHURN_SCORE >= 70 THEN 1 END) as high_churn_count,
-            COUNT(CASE WHEN SATISFACTION >= 4 THEN 1 END) as high_satisfaction_count,
-            COUNT(CASE WHEN SATISFACTION <= 2 THEN 1 END) as low_satisfaction_count
+            ROUND(AVG(SATISFACTION), 1) as avg_satisfaction,
+            ROUND(AVG(CHURN_SCORE), 0) as avg_churn_score
         FROM CONVERSATION_SUMMARY
         WHERE CONVERSATION_TIME > SYSDATE - :days
-        GROUP BY NVL(PRODUCTS, 'Unknown')
+        AND PRODUCTS IS NOT NULL
+        AND TRIM(PRODUCTS) IS NOT NULL
+        AND LOWER(PRODUCTS) NOT LIKE '%none%'
+        AND LOWER(PRODUCTS) NOT LIKE '%price:%'
+        AND LENGTH(TRIM(PRODUCTS)) > 2
+        GROUP BY PRODUCTS
         ORDER BY call_count DESC
         FETCH FIRST :limit ROWS ONLY
     """
 
     results = execute_query(query, {'days': days, 'limit': limit})
 
+    # Filter any remaining garbage in Python
+    clean_results = []
+    for r in (results or []):
+        name = r.get('queue_name', '')
+        if name and is_valid_product(name):
+            clean_results.append(r)
+
     return jsonify({
-        'queues': results if results else [],
+        'queues': clean_results,
         'days': days
     })
 

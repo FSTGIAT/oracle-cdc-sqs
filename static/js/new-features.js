@@ -198,14 +198,14 @@ function renderProductsChart(data) {
         return;
     }
 
-    // Sort by total and take top 3 only for cleaner view
+    // Sort by total and take top 5 for cleaner view
     const topProducts = Object.entries(totals)
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
+        .slice(0, 5)
         .map(([name]) => name);
 
-    // Clean distinct colors for top 3
-    const colors = ['#0d6efd', '#198754', '#fd7e14'];
+    // Clean distinct colors for top 5
+    const colors = ['#0d6efd', '#198754', '#fd7e14', '#6f42c1', '#20c997'];
 
     const datasets = topProducts.map((product, idx) => ({
         label: product,
@@ -277,63 +277,55 @@ async function loadAgentPerformance() {
 }
 
 function renderAgentPerformanceChart(queues, ctx) {
-    console.log('renderAgentPerformanceChart called with', queues?.length, 'queues');
-    console.log('First queue item:', queues?.[0]);
-
     if (!ctx) {
         ctx = document.getElementById('agentPerformanceChart');
-        if (!ctx) {
-            console.log('Canvas not found');
-            return;
-        }
+        if (!ctx) return;
     }
 
     if (agentPerformanceChartInstance) {
         agentPerformanceChartInstance.destroy();
-        console.log('Destroyed previous chart instance');
     }
 
     if (!queues || queues.length === 0) {
-        console.log('No queues data');
-        const legendContainer = document.getElementById('productsLegend');
-        if (legendContainer) {
-            legendContainer.innerHTML = '<div class="text-muted">No performance data available</div>';
-        }
         return;
     }
 
-    // Simple horizontal bar chart showing call count by product
-    const labels = queues.map(d => d.queue_name || 'Unknown');
+    // Horizontal bar chart - calls by product with satisfaction color coding
+    const labels = queues.map(d => d.queue_name || '');
     const callCounts = queues.map(d => d.call_count || 0);
-    const avgSatisfaction = queues.map(d => d.avg_satisfaction || 0);
-    const highChurnCounts = queues.map(d => d.high_churn_count || 0);
 
-    console.log('Chart labels:', labels);
-    console.log('Chart callCounts:', callCounts);
+    // Color based on avg satisfaction (green=high, red=low)
+    const colors = queues.map(d => {
+        const sat = d.avg_satisfaction || 3;
+        if (sat >= 4) return '#198754';  // green - good
+        if (sat <= 2) return '#dc3545';  // red - bad
+        return '#0d6efd';  // blue - neutral
+    });
 
     agentPerformanceChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
-            datasets: [
-                {
-                    label: 'Calls',
-                    data: callCounts,
-                    backgroundColor: '#0d6efd'
-                },
-                {
-                    label: 'High Churn',
-                    data: highChurnCounts,
-                    backgroundColor: '#dc3545'
-                }
-            ]
+            datasets: [{
+                label: 'Calls',
+                data: callCounts,
+                backgroundColor: colors
+            }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             indexAxis: 'y',
             plugins: {
-                legend: { position: 'top' }
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        afterLabel: (context) => {
+                            const q = queues[context.dataIndex];
+                            return `Avg Satisfaction: ${q.avg_satisfaction || '-'}\nAvg Churn: ${q.avg_churn_score || '-'}`;
+                        }
+                    }
+                }
             },
             scales: {
                 x: { beginAtZero: true }
@@ -347,8 +339,6 @@ function renderAgentPerformanceChart(queues, ctx) {
             }
         }
     });
-
-    console.log('Agent performance chart created');
 }
 
 async function drillDownAgentPerformance(queueName) {
