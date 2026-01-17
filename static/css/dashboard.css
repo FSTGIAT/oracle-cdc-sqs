@@ -1,7 +1,22 @@
 /**
- * CDC Analytics Dashboard Styles
+ * Mappi Analytics Dashboard Styles
  * Extracted from dashboard.html for modularity
  */
+
+/* Navbar */
+.navbar.bg-primary {
+    background-color: #1e3a5f !important;
+}
+
+.navbar-brand {
+    padding: 0.25rem 0;
+}
+
+.navbar-logo {
+    height: 48px;
+    width: auto;
+    margin-top: -4px;
+}
 
 /* Base styles */
 body {
