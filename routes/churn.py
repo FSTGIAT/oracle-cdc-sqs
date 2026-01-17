@@ -180,7 +180,7 @@ def api_high_risk_calls():
             s.PRODUCT_CODE as product_code
         FROM CONVERSATION_SUMMARY cs
         LEFT JOIN SUBSCRIBER s
-            ON s.SUBSCRIBER_NO = TO_CHAR(cs.SUBSCRIBER_NO)
+            ON s.SUBSCRIBER_NO = cs.SUBSCRIBER_NO || ' '
             AND s.CUSTOMER_BAN = cs.BAN
         WHERE cs.CHURN_SCORE >= :min_score AND cs.CHURN_SCORE <= :max_score
         AND cs.CONVERSATION_TIME > SYSDATE - :days
