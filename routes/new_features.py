@@ -515,31 +515,60 @@ def api_customer_lookup():
             return jsonify({'found': False, 'error': 'No calls found for this phone number'})
 
     # Get recent calls for this customer
-    calls_query = """
-        SELECT
-            cs.SOURCE_ID as source_id,
-            cs.SOURCE_TYPE as source_type,
-            TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as call_date,
-            cs.SENTIMENT as sentiment,
-            ROUND(cs.CHURN_SCORE, 1) as churn_score,
-            cs.SATISFACTION as satisfaction,
-            SUBSTR(cs.SUMMARY, 1, 80) as summary
-        FROM CONVERSATION_SUMMARY cs
-        WHERE (cs.SUBSCRIBER_NO || ' ' = :subscriber_no OR cs.BAN = :ban)
-        AND cs.CONVERSATION_TIME > SYSDATE - 365
-        ORDER BY cs.CONVERSATION_TIME DESC
-        FETCH FIRST 10 ROWS ONLY
-    """
-    calls = execute_query(calls_query, {'subscriber_no': subscriber_no, 'ban': ban})
+    # Use AND when both subscriber_no and ban are available for exact match
+    if subscriber_no and ban:
+        calls_query = """
+            SELECT
+                cs.SOURCE_ID as source_id,
+                cs.SOURCE_TYPE as source_type,
+                TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as call_date,
+                cs.SENTIMENT as sentiment,
+                ROUND(cs.CHURN_SCORE, 1) as churn_score,
+                cs.SATISFACTION as satisfaction,
+                SUBSTR(cs.SUMMARY, 1, 80) as summary
+            FROM CONVERSATION_SUMMARY cs
+            WHERE cs.SUBSCRIBER_NO || ' ' = :subscriber_no
+            AND cs.BAN = :ban
+            AND cs.CONVERSATION_TIME > SYSDATE - 365
+            ORDER BY cs.CONVERSATION_TIME DESC
+            FETCH FIRST 10 ROWS ONLY
+        """
+        calls = execute_query(calls_query, {'subscriber_no': subscriber_no, 'ban': ban})
 
-    # Get total count
-    count_query = """
-        SELECT COUNT(*) as total
-        FROM CONVERSATION_SUMMARY
-        WHERE (SUBSCRIBER_NO || ' ' = :subscriber_no OR BAN = :ban)
-        AND CONVERSATION_TIME > SYSDATE - 365
-    """
-    count_result = execute_single(count_query, {'subscriber_no': subscriber_no, 'ban': ban})
+        count_query = """
+            SELECT COUNT(*) as total
+            FROM CONVERSATION_SUMMARY
+            WHERE SUBSCRIBER_NO || ' ' = :subscriber_no
+            AND BAN = :ban
+            AND CONVERSATION_TIME > SYSDATE - 365
+        """
+        count_result = execute_single(count_query, {'subscriber_no': subscriber_no, 'ban': ban})
+    else:
+        # Fallback to single field match
+        calls_query = """
+            SELECT
+                cs.SOURCE_ID as source_id,
+                cs.SOURCE_TYPE as source_type,
+                TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as call_date,
+                cs.SENTIMENT as sentiment,
+                ROUND(cs.CHURN_SCORE, 1) as churn_score,
+                cs.SATISFACTION as satisfaction,
+                SUBSTR(cs.SUMMARY, 1, 80) as summary
+            FROM CONVERSATION_SUMMARY cs
+            WHERE (cs.SUBSCRIBER_NO || ' ' = :subscriber_no OR cs.BAN = :ban)
+            AND cs.CONVERSATION_TIME > SYSDATE - 365
+            ORDER BY cs.CONVERSATION_TIME DESC
+            FETCH FIRST 10 ROWS ONLY
+        """
+        calls = execute_query(calls_query, {'subscriber_no': subscriber_no or '', 'ban': ban or ''})
+
+        count_query = """
+            SELECT COUNT(*) as total
+            FROM CONVERSATION_SUMMARY
+            WHERE (SUBSCRIBER_NO || ' ' = :subscriber_no OR BAN = :ban)
+            AND CONVERSATION_TIME > SYSDATE - 365
+        """
+        count_result = execute_single(count_query, {'subscriber_no': subscriber_no or '', 'ban': ban or ''})
     total_interactions = count_result.get('total', 0) if count_result else 0
 
     # Get subscriber status from SUBSCRIBER table
