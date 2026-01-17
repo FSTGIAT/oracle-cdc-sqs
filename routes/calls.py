@@ -145,6 +145,9 @@ def api_call_details():
 
     result = execute_single(query, {'call_id': call_id})
 
+    if not result:
+        return jsonify({'error': 'Call not found', 'call_id': call_id}), 404
+
     # Get categories for this call
     cat_query = """
         SELECT CATEGORY_CODE as category

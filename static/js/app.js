@@ -58,7 +58,7 @@ async function fetchData() {
         // Update recent conversations table
         const recentTable = document.getElementById('recentTable');
         recentTable.innerHTML = recent.map(r => `
-            <tr class="call-row" data-call-id="${escapeHtml(String(r.call_id || ''))}">
+            <tr class="call-row" data-call-id="${escapeHtml(String(r.id || ''))}">
                 <td>${r.created || '-'}</td>
                 <td><span class="badge ${r.type === 'CALL' ? 'bg-primary' : 'bg-success'}">${r.type}</span></td>
                 <td>${getSentimentBadge(r.sentiment)}</td>
