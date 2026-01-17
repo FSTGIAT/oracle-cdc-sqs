@@ -282,17 +282,17 @@ async function showCustomerJourney(subscriberNo, ban) {
 
         const journey = await fetch(`${API_BASE}/api/customer-journey?${params}`).then(r => r.json());
 
-        if (!journey.calls || journey.calls.length === 0) {
+        if (!journey.timeline || journey.timeline.length === 0) {
             container.innerHTML = '<div class="text-center text-muted py-4">No previous calls found for this customer</div>';
             return;
         }
 
         // Update header
-        document.getElementById('journeySubscriberNo').textContent = subscriberNo || '-';
-        document.getElementById('journeyTotalCalls').textContent = journey.total_calls || journey.calls.length;
+        document.getElementById('journeySubscriberNo').textContent = subscriberNo || journey.customer?.subscriber_no || '-';
+        document.getElementById('journeyTotalCalls').textContent = `${journey.customer?.total_interactions || journey.timeline.length} calls`;
 
         // Render timeline
-        container.innerHTML = journey.calls.map((call, index) => {
+        container.innerHTML = journey.timeline.map((call, index) => {
             let churnClass = 'churn-low';
             if (call.churn_score >= 70) churnClass = 'churn-high';
             else if (call.churn_score >= 40) churnClass = 'churn-medium';
