@@ -3,9 +3,20 @@
  * Extracted from dashboard.html for modularity
  */
 
-/* Navbar */
-.navbar.bg-primary {
+/* Navbar and brand colors */
+.navbar.bg-primary,
+.bg-navbar {
     background-color: #1e3a5f !important;
+}
+
+.btn-info,
+.bg-info {
+    background-color: #0EA5E9 !important;
+    border-color: #0EA5E9 !important;
+}
+
+.text-info {
+    color: #0EA5E9 !important;
 }
 
 .navbar-brand {
