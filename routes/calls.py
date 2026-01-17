@@ -112,9 +112,13 @@ def api_churn_calls():
     return jsonify(results)
 
 
-@calls_bp.route('/call/<path:call_id>')
-def api_call_details(call_id):
+@calls_bp.route('/call-details')
+def api_call_details():
     """Get call details from CONVERSATION_SUMMARY with subscriber status"""
+    call_id = request.args.get('id', '')
+    if not call_id:
+        return jsonify({'error': 'Missing call id'}), 400
+
     # Use LEFT JOIN to get subscriber status in one query (same pattern as churn.py)
     query = """
         SELECT
@@ -164,9 +168,13 @@ def api_call_details(call_id):
     return jsonify(result)
 
 
-@calls_bp.route('/call/<path:call_id>/conversation')
-def api_call_conversation(call_id):
+@calls_bp.route('/call-conversation')
+def api_call_conversation():
     """Get full conversation from VERINT_TEXT_ANALYSIS"""
+    call_id = request.args.get('id', '')
+    if not call_id:
+        return jsonify({'error': 'Missing call id', 'messages': []}), 400
+
     query = """
         SELECT
             CALL_ID as call_id,
