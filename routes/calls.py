@@ -112,7 +112,7 @@ def api_churn_calls():
     return jsonify(results)
 
 
-@calls_bp.route('/call/<call_id>')
+@calls_bp.route('/call/<path:call_id>')
 def api_call_details(call_id):
     """Get call details from CONVERSATION_SUMMARY with subscriber status"""
     # Use LEFT JOIN to get subscriber status in one query (same pattern as churn.py)
@@ -164,7 +164,7 @@ def api_call_details(call_id):
     return jsonify(result)
 
 
-@calls_bp.route('/call/<call_id>/conversation')
+@calls_bp.route('/call/<path:call_id>/conversation')
 def api_call_conversation(call_id):
     """Get full conversation from VERINT_TEXT_ANALYSIS"""
     query = """
