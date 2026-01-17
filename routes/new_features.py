@@ -365,10 +365,9 @@ def api_customer_journey():
         return jsonify({'error': 'subscriber_no or ban is required'}), 400
 
     # Build condition based on provided params
-    # Use || ' ' pattern for subscriber matching (same as other queries)
+    # Use AND when both available for exact subscriber match (same BAN can have multiple subs)
     if subscriber_no and ban:
-        condition = "(cs.SUBSCRIBER_NO || ' ' = :subscriber_no OR cs.BAN = :ban)"
-        # Add space to subscriber_no if not present
+        condition = "cs.SUBSCRIBER_NO || ' ' = :subscriber_no AND cs.BAN = :ban"
         sub_param = subscriber_no if subscriber_no.endswith(' ') else subscriber_no + ' '
         params = {'subscriber_no': sub_param, 'ban': ban}
     elif subscriber_no:
