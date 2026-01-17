@@ -134,7 +134,7 @@ def api_call_details(call_id):
             s.PRODUCT_CODE as product_code
         FROM CONVERSATION_SUMMARY cs
         LEFT JOIN SUBSCRIBER s
-            ON s.SUBSCRIBER_NO = TO_CHAR(cs.SUBSCRIBER_NO)
+            ON s.SUBSCRIBER_NO = cs.SUBSCRIBER_NO || ' '
             AND s.CUSTOMER_BAN = cs.BAN
         WHERE cs.SOURCE_ID = :call_id
     """
