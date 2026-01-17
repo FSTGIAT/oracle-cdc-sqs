@@ -151,6 +151,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Auto-refresh every 30 seconds
     setInterval(fetchData, 30000);
+    setInterval(() => {
+        if (churnAnalyticsLoaded) {
+            loadChurnAnalytics();
+        }
+    }, 30000);
 
     // ML Quality tab lazy loading
     const mlQualityTab = document.getElementById('mlquality-tab');
