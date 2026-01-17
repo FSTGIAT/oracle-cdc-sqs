@@ -467,6 +467,106 @@ def api_customer_journey():
 
 
 # ========================================
+# CUSTOMER LOOKUP
+# ========================================
+
+@new_features_bp.route('/customer-lookup')
+def api_customer_lookup():
+    """
+    Lookup customer by phone number or call ID.
+    Returns customer info + recent calls preview.
+    """
+    search_type = request.args.get('type', 'phone')  # 'phone' or 'source_id'
+    value = request.args.get('value', '').strip()
+
+    if not value:
+        return jsonify({'found': False, 'error': 'No search value provided'})
+
+    subscriber_no = None
+    ban = None
+
+    if search_type == 'source_id':
+        # Lookup by call/source ID first to get subscriber info
+        call_query = """
+            SELECT SUBSCRIBER_NO || ' ' as subscriber_no, BAN as ban
+            FROM CONVERSATION_SUMMARY
+            WHERE SOURCE_ID = :source_id
+        """
+        call_result = execute_single(call_query, {'source_id': value})
+        if call_result:
+            subscriber_no = call_result.get('subscriber_no')
+            ban = call_result.get('ban')
+        else:
+            return jsonify({'found': False, 'error': 'Call ID not found'})
+    else:
+        # Search by phone number (subscriber_no)
+        # Try to find any call with this subscriber
+        phone_query = """
+            SELECT SUBSCRIBER_NO || ' ' as subscriber_no, BAN as ban
+            FROM CONVERSATION_SUMMARY
+            WHERE SUBSCRIBER_NO || ' ' = :phone
+            AND ROWNUM = 1
+        """
+        phone_result = execute_single(phone_query, {'phone': value + ' '})
+        if phone_result:
+            subscriber_no = phone_result.get('subscriber_no')
+            ban = phone_result.get('ban')
+        else:
+            return jsonify({'found': False, 'error': 'No calls found for this phone number'})
+
+    # Get recent calls for this customer
+    calls_query = """
+        SELECT
+            cs.SOURCE_ID as source_id,
+            cs.SOURCE_TYPE as source_type,
+            TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as call_date,
+            cs.SENTIMENT as sentiment,
+            ROUND(cs.CHURN_SCORE, 1) as churn_score,
+            cs.SATISFACTION as satisfaction,
+            SUBSTR(cs.SUMMARY, 1, 80) as summary
+        FROM CONVERSATION_SUMMARY cs
+        WHERE (cs.SUBSCRIBER_NO || ' ' = :subscriber_no OR cs.BAN = :ban)
+        AND cs.CONVERSATION_TIME > SYSDATE - 365
+        ORDER BY cs.CONVERSATION_TIME DESC
+        FETCH FIRST 10 ROWS ONLY
+    """
+    calls = execute_query(calls_query, {'subscriber_no': subscriber_no, 'ban': ban})
+
+    # Get total count
+    count_query = """
+        SELECT COUNT(*) as total
+        FROM CONVERSATION_SUMMARY
+        WHERE (SUBSCRIBER_NO || ' ' = :subscriber_no OR BAN = :ban)
+        AND CONVERSATION_TIME > SYSDATE - 365
+    """
+    count_result = execute_single(count_query, {'subscriber_no': subscriber_no, 'ban': ban})
+    total_interactions = count_result.get('total', 0) if count_result else 0
+
+    # Get subscriber status from SUBSCRIBER table
+    status_info = None
+    if subscriber_no and ban:
+        status_query = """
+            SELECT SUB_STATUS, PRODUCT_CODE
+            FROM SUBSCRIBER
+            WHERE SUBSCRIBER_NO = :subscriber_no AND CUSTOMER_BAN = :ban
+            FETCH FIRST 1 ROW ONLY
+        """
+        status_info = execute_single(status_query, {'subscriber_no': subscriber_no, 'ban': ban})
+
+    return jsonify({
+        'found': True,
+        'customer': {
+            'subscriber_no': subscriber_no.strip() if subscriber_no else None,
+            'ban': ban,
+            'status': status_info.get('sub_status') if status_info else 'Unknown',
+            'product_code': status_info.get('product_code') if status_info else None,
+            'total_interactions': total_interactions
+        },
+        'recent_calls': calls
+    })
+
+
+# ========================================
 # HEALTH CHECK
 # ========================================
 

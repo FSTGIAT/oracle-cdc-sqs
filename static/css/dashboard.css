@@ -500,3 +500,43 @@ body {
         break-inside: avoid;
     }
 }
+
+/* Customer Lookup Modal */
+#lookupModal .modal-body {
+    min-height: 300px;
+}
+
+.btn-search-nav {
+    background-color: #1e3a5f;
+    border-color: #1e3a5f;
+    color: #fff;
+}
+
+.btn-search-nav:hover {
+    background-color: #152c4a;
+    border-color: #152c4a;
+    color: #fff;
+}
+
+#lookupModal .call-row {
+    cursor: pointer;
+}
+
+#lookupModal .call-row:hover {
+    background-color: #e3f2fd;
+}
+
+#lookupModal .summary-preview {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#lookupCustomerCard {
+    border-left: 4px solid #0d6efd;
+}
+
+#lookupCustomerCard .card-title {
+    font-size: 1.25rem;
+}

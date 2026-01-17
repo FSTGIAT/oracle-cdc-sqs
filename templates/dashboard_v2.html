@@ -56,6 +56,9 @@
                 </svg>
             </a>
             <div class="d-flex align-items-center">
+                <button class="btn btn-outline-light btn-sm me-3" onclick="showCustomerLookup()" title="Customer Lookup">
+                    <i class="bi bi-search"></i>
+                </button>
                 <select class="form-select form-select-sm me-3" id="timeFilter" style="width: auto;">
                     <option value="1">Last 24 Hours</option>
                     <option value="7" selected>Last 7 Days</option>
@@ -693,6 +696,107 @@
                                 <div class="text-center text-muted py-4">Loading conversation...</div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Lookup Modal -->
+    <div class="modal fade" id="lookupModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-search"></i> Customer Lookup
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Search Form -->
+                    <div class="row mb-4">
+                        <div class="col-md-8">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-telephone"></i></span>
+                                <input type="text" class="form-control" id="lookupInput" placeholder="Enter phone number or call ID...">
+                                <button class="btn btn-search-nav" type="button" onclick="searchCustomer()">
+                                    <i class="bi bi-search"></i> Search
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="lookupType" id="lookupPhone" value="phone" checked>
+                                <label class="btn btn-outline-secondary" for="lookupPhone">Phone</label>
+                                <input type="radio" class="btn-check" name="lookupType" id="lookupCallId" value="source_id">
+                                <label class="btn btn-outline-secondary" for="lookupCallId">Call ID</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Results Area -->
+                    <div id="lookupResults" style="display: none;">
+                        <!-- Customer Info Card -->
+                        <div class="card mb-3" id="lookupCustomerCard">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h5 class="card-title mb-1">
+                                            <i class="bi bi-person-circle"></i>
+                                            <span id="lookupSubscriberNo">-</span>
+                                            <span id="lookupStatusBadge" class="badge ms-2">-</span>
+                                        </h5>
+                                        <p class="text-muted mb-2">
+                                            BAN: <span id="lookupBan">-</span> |
+                                            Product: <span id="lookupProduct">-</span>
+                                        </p>
+                                        <p class="mb-0">
+                                            <span class="badge bg-info" id="lookupTotalCalls">0 interactions</span>
+                                        </p>
+                                    </div>
+                                    <button class="btn btn-info" id="lookupJourneyBtn" onclick="viewFullJourney()">
+                                        <i class="bi bi-clock-history"></i> View Full Journey
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Calls Table -->
+                        <h6><i class="bi bi-telephone-inbound"></i> Recent Interactions</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Sentiment</th>
+                                        <th>Churn</th>
+                                        <th>Summary</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="lookupCallsBody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Loading State -->
+                    <div id="lookupLoading" class="text-center py-4" style="display: none;">
+                        <div class="spinner-border text-primary"></div>
+                        <p class="mt-2">Searching...</p>
+                    </div>
+
+                    <!-- No Results State -->
+                    <div id="lookupNoResults" class="text-center py-4" style="display: none;">
+                        <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                        <p class="mt-2 text-muted">No customer found with this identifier</p>
+                    </div>
+
+                    <!-- Initial State -->
+                    <div id="lookupInitial" class="text-center py-4">
+                        <i class="bi bi-person-badge text-muted" style="font-size: 3rem;"></i>
+                        <p class="mt-2 text-muted">Enter a phone number or call ID to lookup customer</p>
                     </div>
                 </div>
             </div>

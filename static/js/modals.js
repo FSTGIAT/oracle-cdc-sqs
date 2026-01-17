@@ -322,3 +322,129 @@ async function showCustomerJourney(subscriberNo, ban) {
         container.innerHTML = `<div class="text-danger text-center py-4">Error loading journey: ${error.message}</div>`;
     }
 }
+
+// ========================================
+// CUSTOMER LOOKUP
+// ========================================
+
+let lookupModal = null;
+let currentLookupCustomer = null;
+
+// Initialize lookup modal
+document.addEventListener('DOMContentLoaded', function() {
+    const lookupModalEl = document.getElementById('lookupModal');
+    if (lookupModalEl) {
+        lookupModal = new bootstrap.Modal(lookupModalEl);
+
+        // Allow Enter key to trigger search
+        document.getElementById('lookupInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchCustomer();
+            }
+        });
+    }
+});
+
+// Show lookup modal
+function showCustomerLookup() {
+    // Reset state
+    document.getElementById('lookupInput').value = '';
+    document.getElementById('lookupResults').style.display = 'none';
+    document.getElementById('lookupLoading').style.display = 'none';
+    document.getElementById('lookupNoResults').style.display = 'none';
+    document.getElementById('lookupInitial').style.display = 'block';
+    currentLookupCustomer = null;
+
+    lookupModal.show();
+
+    // Focus input
+    setTimeout(() => document.getElementById('lookupInput').focus(), 300);
+}
+
+// Search customer
+async function searchCustomer() {
+    const value = document.getElementById('lookupInput').value.trim();
+    const type = document.querySelector('input[name="lookupType"]:checked').value;
+
+    if (!value) {
+        return;
+    }
+
+    // Show loading
+    document.getElementById('lookupInitial').style.display = 'none';
+    document.getElementById('lookupResults').style.display = 'none';
+    document.getElementById('lookupNoResults').style.display = 'none';
+    document.getElementById('lookupLoading').style.display = 'block';
+
+    try {
+        const response = await fetch(`${API_BASE}/api/customer-lookup?type=${type}&value=${encodeURIComponent(value)}`);
+        const data = await response.json();
+
+        document.getElementById('lookupLoading').style.display = 'none';
+
+        if (!data.found) {
+            document.getElementById('lookupNoResults').style.display = 'block';
+            return;
+        }
+
+        // Store customer info for journey button
+        currentLookupCustomer = data.customer;
+
+        // Populate customer card
+        document.getElementById('lookupSubscriberNo').textContent = data.customer.subscriber_no || '-';
+        document.getElementById('lookupBan').textContent = data.customer.ban || '-';
+        document.getElementById('lookupProduct').textContent = data.customer.product_code || '-';
+        document.getElementById('lookupTotalCalls').textContent = `${data.customer.total_interactions} interactions`;
+
+        // Status badge
+        const statusBadge = document.getElementById('lookupStatusBadge');
+        if (data.customer.status === 'A') {
+            statusBadge.className = 'badge bg-success ms-2';
+            statusBadge.textContent = 'Active';
+        } else if (data.customer.status === 'C') {
+            statusBadge.className = 'badge bg-danger ms-2';
+            statusBadge.textContent = 'Churned';
+        } else {
+            statusBadge.className = 'badge bg-secondary ms-2';
+            statusBadge.textContent = 'Unknown';
+        }
+
+        // Populate recent calls table
+        const tbody = document.getElementById('lookupCallsBody');
+        if (data.recent_calls && data.recent_calls.length > 0) {
+            tbody.innerHTML = data.recent_calls.map(call => `
+                <tr class="call-row" onclick="viewCallFromLookup('${call.source_id}')">
+                    <td>${call.call_date || '-'}</td>
+                    <td><span class="badge ${call.source_type === 'WAPP' ? 'bg-success' : 'bg-primary'}">${call.source_type || '-'}</span></td>
+                    <td>${getSentimentBadge(call.sentiment)}</td>
+                    <td>${getChurnBadge(call.churn_score)}</td>
+                    <td class="summary-preview">${escapeHtml(call.summary || '-')}</td>
+                    <td><i class="bi bi-chevron-right text-muted"></i></td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No recent calls found</td></tr>';
+        }
+
+        document.getElementById('lookupResults').style.display = 'block';
+
+    } catch (error) {
+        console.error('Error searching customer:', error);
+        document.getElementById('lookupLoading').style.display = 'none';
+        document.getElementById('lookupNoResults').style.display = 'block';
+    }
+}
+
+// View call details from lookup
+function viewCallFromLookup(callId) {
+    lookupModal.hide();
+    showCallDetails(callId);
+}
+
+// View full journey from lookup
+function viewFullJourney() {
+    if (currentLookupCustomer) {
+        lookupModal.hide();
+        showCustomerJourney(currentLookupCustomer.subscriber_no, currentLookupCustomer.ban);
+    }
+}
