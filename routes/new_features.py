@@ -365,13 +365,16 @@ def api_customer_journey():
         return jsonify({'error': 'subscriber_no or ban is required'}), 400
 
     # Build condition based on provided params
-    # Use TO_CHAR for NUMBER to VARCHAR conversion
+    # Use || ' ' pattern for subscriber matching (same as other queries)
     if subscriber_no and ban:
-        condition = "(TO_CHAR(cs.SUBSCRIBER_NO) = :subscriber_no OR cs.BAN = :ban)"
-        params = {'subscriber_no': subscriber_no, 'ban': ban}
+        condition = "(cs.SUBSCRIBER_NO || ' ' = :subscriber_no OR cs.BAN = :ban)"
+        # Add space to subscriber_no if not present
+        sub_param = subscriber_no if subscriber_no.endswith(' ') else subscriber_no + ' '
+        params = {'subscriber_no': sub_param, 'ban': ban}
     elif subscriber_no:
-        condition = "TO_CHAR(cs.SUBSCRIBER_NO) = :subscriber_no"
-        params = {'subscriber_no': subscriber_no}
+        condition = "cs.SUBSCRIBER_NO || ' ' = :subscriber_no"
+        sub_param = subscriber_no if subscriber_no.endswith(' ') else subscriber_no + ' '
+        params = {'subscriber_no': sub_param}
     else:
         condition = "cs.BAN = :ban"
         params = {'ban': ban}
@@ -585,7 +588,7 @@ def api_customer_lookup():
     return jsonify({
         'found': True,
         'customer': {
-            'subscriber_no': subscriber_no.strip() if subscriber_no else None,
+            'subscriber_no': subscriber_no,
             'ban': ban,
             'status': status_info.get('sub_status') if status_info else 'Unknown',
             'product_code': status_info.get('product_code') if status_info else None,
