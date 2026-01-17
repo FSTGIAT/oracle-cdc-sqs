@@ -22,12 +22,12 @@ def api_churn_accuracy():
         AND CONVERSATION_TIME > SYSDATE - :days
     """
 
-    # Query 2: Actual churns - use TO_CHAR for type conversion
+    # Query 2: Actual churns - use || ' ' for type conversion
     actual_query = """
         SELECT COUNT(*) as actual_churns
         FROM SUBSCRIBER a
         WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
-            SELECT TO_CHAR(SUBSCRIBER_NO), BAN
+            SELECT SUBSCRIBER_NO || ' ', BAN
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= 70
             AND CONVERSATION_TIME > SYSDATE - :days
@@ -58,7 +58,7 @@ def api_churn_by_product():
         SELECT a.PRODUCT_CODE, COUNT(*) as count
         FROM SUBSCRIBER a
         WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
-            SELECT TO_CHAR(SUBSCRIBER_NO), BAN
+            SELECT SUBSCRIBER_NO || ' ', BAN
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= 70
             AND CONVERSATION_TIME > SYSDATE - :days
@@ -94,12 +94,12 @@ def api_churn_by_score_range():
         pred = execute_single(pred_query, {'min_score': r['min'], 'max_score': r['max'], 'days': days})
         predictions = pred.get('count', 0) or 0
 
-        # Count churned - use TO_CHAR for type conversion
+        # Count churned - use || ' ' for type conversion
         churn_query = """
             SELECT COUNT(*) as count
             FROM SUBSCRIBER a
             WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
-                SELECT TO_CHAR(SUBSCRIBER_NO), BAN
+                SELECT SUBSCRIBER_NO || ' ', BAN
                 FROM CONVERSATION_SUMMARY
                 WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
                 AND CONVERSATION_TIME > SYSDATE - :days
