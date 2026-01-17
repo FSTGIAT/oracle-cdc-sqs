@@ -56,8 +56,9 @@ async function fetchData() {
         }
 
         // Update recent conversations table
-        document.getElementById('recentTable').innerHTML = recent.map(r => `
-            <tr class="call-row" onclick="showCallDetails('${escapeHtml(String(r.call_id || ''))}')">
+        const recentTable = document.getElementById('recentTable');
+        recentTable.innerHTML = recent.map(r => `
+            <tr class="call-row" data-call-id="${escapeHtml(String(r.call_id || ''))}">
                 <td>${r.created || '-'}</td>
                 <td><span class="badge ${r.type === 'CALL' ? 'bg-primary' : 'bg-success'}">${r.type}</span></td>
                 <td>${getSentimentBadge(r.sentiment)}</td>
@@ -66,6 +67,11 @@ async function fetchData() {
                 <td class="summary-preview" title="${escapeHtml(r.summary || '')}">${(r.summary || '').substring(0, 40)}...</td>
             </tr>
         `).join('');
+
+        // Add click handlers for call rows
+        recentTable.querySelectorAll('.call-row').forEach(row => {
+            row.onclick = () => showCallDetails(row.dataset.callId);
+        });
 
         // Update last refresh time
         const lastUpdateEl = document.getElementById('lastUpdate');
