@@ -114,23 +114,29 @@ def api_churn_calls():
 
 @calls_bp.route('/call/<call_id>')
 def api_call_details(call_id):
-    """Get call details from CONVERSATION_SUMMARY"""
+    """Get call details from CONVERSATION_SUMMARY with subscriber status"""
+    # Use LEFT JOIN to get subscriber status in one query (same pattern as churn.py)
     query = """
         SELECT
-            SOURCE_ID as call_id,
-            SOURCE_TYPE as type,
-            TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI:SS') as created,
-            SUMMARY as summary,
-            SENTIMENT as sentiment,
-            SATISFACTION as satisfaction,
-            ROUND(CHURN_SCORE, 1) as churn_score,
-            PRODUCTS as products,
-            ACTION_ITEMS as action_items,
-            UNRESOLVED_ISSUES as unresolved_issues,
-            BAN as ban,
-            SUBSCRIBER_NO as subscriber_no
-        FROM CONVERSATION_SUMMARY
-        WHERE SOURCE_ID = :call_id
+            cs.SOURCE_ID as call_id,
+            cs.SOURCE_TYPE as type,
+            TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI:SS') as created,
+            cs.SUMMARY as summary,
+            cs.SENTIMENT as sentiment,
+            cs.SATISFACTION as satisfaction,
+            ROUND(cs.CHURN_SCORE, 1) as churn_score,
+            cs.PRODUCTS as products,
+            cs.ACTION_ITEMS as action_items,
+            cs.UNRESOLVED_ISSUES as unresolved_issues,
+            cs.BAN as ban,
+            cs.SUBSCRIBER_NO || ' ' as subscriber_no,
+            s.SUB_STATUS as sub_status,
+            s.PRODUCT_CODE as product_code
+        FROM CONVERSATION_SUMMARY cs
+        LEFT JOIN SUBSCRIBER s
+            ON s.SUBSCRIBER_NO = TO_CHAR(cs.SUBSCRIBER_NO)
+            AND s.CUSTOMER_BAN = cs.BAN
+        WHERE cs.SOURCE_ID = :call_id
     """
 
     result = execute_single(query, {'call_id': call_id})
@@ -154,24 +160,6 @@ def api_call_details(call_id):
     """
     queue_result = execute_single(queue_query, {'call_id': call_id})
     result['queue_name'] = queue_result.get('queue_name') if queue_result else None
-
-    # Get subscriber status from SUBSCRIBER table
-    result['sub_status'] = None
-    result['product_code'] = None
-    if result.get('subscriber_no') and result.get('ban'):
-        status_query = """
-            SELECT SUB_STATUS, PRODUCT_CODE
-            FROM SUBSCRIBER
-            WHERE SUBSCRIBER_NO = :subscriber_no
-            AND CUSTOMER_BAN = :ban
-        """
-        status_result = execute_single(status_query, {
-            'subscriber_no': result['subscriber_no'],
-            'ban': result['ban']
-        })
-        if status_result:
-            result['sub_status'] = status_result.get('sub_status')
-            result['product_code'] = status_result.get('product_code')
 
     return jsonify(result)
 
