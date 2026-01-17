@@ -10,6 +10,9 @@ let categoryModal, callModal, journeyModal;
 let currentCallIdForFeedback = null;
 let currentCategoriesForFeedback = [];
 
+// Journey context for back navigation
+let currentJourneyContext = null;
+
 // Initialize modals
 function initModals() {
     categoryModal = new bootstrap.Modal(document.getElementById('categoryModal'));
@@ -156,10 +159,16 @@ async function showChurnRiskCalls(riskLevel) {
 }
 
 // Show call details with conversation
-async function showCallDetails(callId) {
+async function showCallDetails(callId, fromJourney = false) {
     document.getElementById('callModalId').textContent = callId;
     document.getElementById('callDetailsLoading').style.display = 'block';
     document.getElementById('callDetailsContent').style.display = 'none';
+
+    // Show/hide back to journey button
+    const backBtn = document.getElementById('backToJourneyBtn');
+    if (backBtn) {
+        backBtn.style.display = fromJourney ? 'inline-block' : 'none';
+    }
 
     // Set current call for feedback
     currentCallIdForFeedback = callId;
@@ -264,6 +273,9 @@ function renderConversation(messages) {
 async function showCustomerJourney(subscriberNo, ban) {
     if (!journeyModal) return;
 
+    // Store context for back navigation
+    currentJourneyContext = { subscriberNo, ban };
+
     const container = document.getElementById('journeyTimeline');
     if (!container) return;
 
@@ -310,7 +322,7 @@ async function showCustomerJourney(subscriberNo, ban) {
                             </div>
                         </div>
                         <div class="timeline-summary">${escapeHtml(call.summary || 'No summary available')}</div>
-                        <button class="btn btn-sm btn-outline-primary mt-2" onclick="showCallDetails('${call.source_id}')">
+                        <button class="btn btn-sm btn-outline-primary mt-2" onclick="showCallFromJourney('${escapeHtml(call.source_id)}')">
                             View Details
                         </button>
                     </div>
@@ -321,6 +333,20 @@ async function showCustomerJourney(subscriberNo, ban) {
     } catch (error) {
         console.error('Error loading customer journey:', error);
         container.innerHTML = `<div class="text-danger text-center py-4">Error loading journey: ${error.message}</div>`;
+    }
+}
+
+// Show call details from journey (hides journey modal first)
+function showCallFromJourney(callId) {
+    journeyModal.hide();
+    showCallDetails(callId, true);
+}
+
+// Back to journey from call details
+function backToJourney() {
+    callModal.hide();
+    if (currentJourneyContext) {
+        showCustomerJourney(currentJourneyContext.subscriberNo, currentJourneyContext.ban);
     }
 }
 
