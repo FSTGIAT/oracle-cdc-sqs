@@ -44,6 +44,8 @@ async function loadChurnAnalytics() {
         const highRisk = await highRiskRes.json();
 
         // === KPI Cards ===
+        const daysLabel = document.getElementById('churnDaysLabel');
+        if (daysLabel) daysLabel.textContent = `(${days}d)`;
         document.getElementById('churnTotalPredictions').textContent = formatNumber(accuracy.total_predictions);
         document.getElementById('churnActualChurns').textContent = formatNumber(accuracy.actual_churns);
         document.getElementById('churnAccuracyRate').textContent = (accuracy.accuracy_rate || 0) + '%';
