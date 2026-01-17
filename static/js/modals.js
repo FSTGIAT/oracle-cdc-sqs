@@ -169,9 +169,10 @@ async function showCallDetails(callId) {
 
     try {
         // Fetch call details and conversation in parallel
+        const encodedCallId = encodeURIComponent(callId);
         const [details, conversation] = await Promise.all([
-            fetch(`${API_BASE}/api/call/${callId}`).then(r => r.json()),
-            fetch(`${API_BASE}/api/call/${callId}/conversation`).then(r => r.json())
+            fetch(`${API_BASE}/api/call/${encodedCallId}`).then(r => r.json()),
+            fetch(`${API_BASE}/api/call/${encodedCallId}/conversation`).then(r => r.json())
         ]);
 
         // Populate details
