@@ -12,16 +12,29 @@ let highRiskCurrentPage = 0;
 let highRiskPageSize = 25;
 let highRiskTotalPages = 1;
 
+// Get days filter value (default 180)
+function getChurnDays() {
+    const input = document.getElementById('churnDaysFilter');
+    return input ? parseInt(input.value) || 180 : 180;
+}
+
+// Reload churn analytics with current filter
+function reloadChurnAnalytics() {
+    churnAnalyticsLoaded = false;
+    loadChurnAnalytics();
+}
+
 // Load all churn analytics data
 async function loadChurnAnalytics() {
-    console.log('Loading churn analytics...');
+    const days = getChurnDays();
+    console.log(`Loading churn analytics for ${days} days...`);
     try {
         const [accuracyRes, productRes, rangeRes, trendRes, highRiskRes] = await Promise.all([
-            fetch(`${API_BASE}/api/churn/accuracy`),
-            fetch(`${API_BASE}/api/churn/by-product`),
-            fetch(`${API_BASE}/api/churn/by-score-range`),
-            fetch(`${API_BASE}/api/churn/trend?days=30`),
-            fetch(`${API_BASE}/api/churn/high-risk-calls?days=7&limit=100`)
+            fetch(`${API_BASE}/api/churn/accuracy?days=${days}`),
+            fetch(`${API_BASE}/api/churn/by-product?days=${days}`),
+            fetch(`${API_BASE}/api/churn/by-score-range?days=${days}`),
+            fetch(`${API_BASE}/api/churn/trend?days=${days}`),
+            fetch(`${API_BASE}/api/churn/high-risk-calls?days=${days}&limit=100`)
         ]);
 
         const accuracy = await accuracyRes.json();

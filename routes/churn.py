@@ -12,11 +12,14 @@ churn_bp = Blueprint('churn', __name__)
 @churn_bp.route('/accuracy')
 def api_churn_accuracy():
     """Get churn prediction accuracy stats for score >= 70"""
+    days = request.args.get('days', 180, type=int)
+
     # Query 1: Total predictions
     total_query = """
         SELECT COUNT(*) as total_predictions
         FROM CONVERSATION_SUMMARY
         WHERE CHURN_SCORE >= 70
+        AND CONVERSATION_TIME > SYSDATE - :days
     """
 
     # Query 2: Actual churns - use TO_CHAR for type conversion
@@ -27,11 +30,12 @@ def api_churn_accuracy():
             SELECT TO_CHAR(SUBSCRIBER_NO), BAN
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= 70
+            AND CONVERSATION_TIME > SYSDATE - :days
         ) AND a.SUB_STATUS = 'C'
     """
 
-    total = execute_single(total_query)
-    actual = execute_single(actual_query)
+    total = execute_single(total_query, {'days': days})
+    actual = execute_single(actual_query, {'days': days})
 
     total_predictions = total.get('total_predictions', 0) or 0
     actual_churns = actual.get('actual_churns', 0) or 0
@@ -48,6 +52,8 @@ def api_churn_accuracy():
 @churn_bp.route('/by-product')
 def api_churn_by_product():
     """Get churn breakdown by product code"""
+    days = request.args.get('days', 180, type=int)
+
     query = """
         SELECT a.PRODUCT_CODE, COUNT(*) as count
         FROM SUBSCRIBER a
@@ -55,17 +61,20 @@ def api_churn_by_product():
             SELECT TO_CHAR(SUBSCRIBER_NO), BAN
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= 70
+            AND CONVERSATION_TIME > SYSDATE - :days
         ) AND a.SUB_STATUS = 'C'
         GROUP BY a.PRODUCT_CODE
         ORDER BY count DESC
     """
-    results = execute_query(query)
+    results = execute_query(query, {'days': days})
     return jsonify(results if results else [])
 
 
 @churn_bp.route('/by-score-range')
 def api_churn_by_score_range():
     """Get churn analysis by score ranges (90-100, 70-90, 40-70, 0-40)"""
+    days = request.args.get('days', 180, type=int)
+
     ranges = [
         {'label': '90-100 (Critical)', 'min': 90, 'max': 100},
         {'label': '70-90 (High)', 'min': 70, 'max': 89},
@@ -80,8 +89,9 @@ def api_churn_by_score_range():
             SELECT COUNT(*) as count
             FROM CONVERSATION_SUMMARY
             WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
+            AND CONVERSATION_TIME > SYSDATE - :days
         """
-        pred = execute_single(pred_query, {'min_score': r['min'], 'max_score': r['max']})
+        pred = execute_single(pred_query, {'min_score': r['min'], 'max_score': r['max'], 'days': days})
         predictions = pred.get('count', 0) or 0
 
         # Count churned - use TO_CHAR for type conversion
@@ -92,11 +102,11 @@ def api_churn_by_score_range():
                 SELECT TO_CHAR(SUBSCRIBER_NO), BAN
                 FROM CONVERSATION_SUMMARY
                 WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
+                AND CONVERSATION_TIME > SYSDATE - :days
             )
             AND a.SUB_STATUS = 'C'
-            AND a.SUB_STATUS_DATE > SYSDATE - 90
         """
-        churn_result = execute_single(churn_query, {'min_score': r['min'], 'max_score': r['max']})
+        churn_result = execute_single(churn_query, {'min_score': r['min'], 'max_score': r['max'], 'days': days})
         actual_churns = churn_result.get('count', 0) or 0
 
         accuracy = round((actual_churns / predictions * 100), 1) if predictions > 0 else 0

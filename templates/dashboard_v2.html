@@ -349,6 +349,14 @@
         <!-- CHURN ANALYTICS TAB -->
         <!-- ============================== -->
         <div class="tab-pane fade" id="churnanalytics" role="tabpanel">
+            <!-- Time Filter -->
+            <div class="d-flex justify-content-end mb-3">
+                <div class="input-group" style="width: auto;">
+                    <span class="input-group-text">Days</span>
+                    <input type="number" class="form-control form-control-sm" id="churnDaysFilter" value="180" min="1" max="365" style="width: 80px;">
+                    <button class="btn btn-sm btn-search-nav" onclick="reloadChurnAnalytics()">Apply</button>
+                </div>
+            </div>
             <!-- Churn KPI Cards -->
             <div class="row mb-4">
                 <div class="col-md-3">
