@@ -18,6 +18,40 @@
     margin-top: -4px;
 }
 
+/* Splash Screen */
+.splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #1e3a5f;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    transition: opacity 0.5s ease-out;
+}
+
+.splash-screen.fade-out {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.splash-logo {
+    height: 120px;
+    width: auto;
+    margin-bottom: 20px;
+}
+
+.splash-loading {
+    color: #7DD3FC;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+}
+
 /* Base styles */
 body {
     background-color: #f8f9fa;

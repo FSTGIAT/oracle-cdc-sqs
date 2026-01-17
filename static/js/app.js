@@ -94,7 +94,10 @@ async function fetchData() {
 }
 
 // Initialize dashboard
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    const splash = document.getElementById('splashScreen');
+    const splashShown = sessionStorage.getItem('splashShown');
+
     // Initialize Bootstrap modals
     initModals();
 
@@ -107,8 +110,38 @@ document.addEventListener('DOMContentLoaded', () => {
         initGridStack();
     }
 
-    // Initial data fetch
-    fetchData();
+    // Handle splash screen and initial data load
+    if (!splashShown && splash) {
+        // First visit or hard refresh - show splash and preload all data
+        splash.style.display = 'flex';
+
+        const minTime = new Promise(resolve => setTimeout(resolve, 2000));
+        const dataLoad = Promise.all([
+            fetchData(),
+            typeof loadChurnAnalytics === 'function' ? loadChurnAnalytics() : Promise.resolve()
+        ]);
+
+        // Wait for both minimum time AND data to load
+        await Promise.all([minTime, dataLoad]);
+
+        // Fade out splash
+        splash.classList.add('fade-out');
+        setTimeout(() => {
+            splash.style.display = 'none';
+        }, 500);
+
+        // Mark splash as shown for this session
+        sessionStorage.setItem('splashShown', 'true');
+
+        // Mark churn as loaded since we preloaded it
+        if (typeof churnAnalyticsLoaded !== 'undefined') {
+            churnAnalyticsLoaded = true;
+        }
+    } else {
+        // Normal load - hide splash immediately, load data normally
+        if (splash) splash.style.display = 'none';
+        fetchData();
+    }
 
     // Time filter change handler
     const timeFilter = document.getElementById('timeFilter');
