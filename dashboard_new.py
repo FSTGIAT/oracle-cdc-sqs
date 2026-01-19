@@ -26,6 +26,7 @@ from routes.calls import calls_bp
 from routes.churn import churn_bp
 from routes.ml_quality import ml_quality_bp
 from routes.new_features import new_features_bp
+from routes.alerts import alerts_bp
 
 # Register blueprints with URL prefixes
 app.register_blueprint(analytics_bp, url_prefix='/api')
@@ -33,6 +34,7 @@ app.register_blueprint(calls_bp, url_prefix='/api')
 app.register_blueprint(churn_bp, url_prefix='/api/churn')
 app.register_blueprint(ml_quality_bp, url_prefix='/api/ml-quality')
 app.register_blueprint(new_features_bp, url_prefix='/api')
+app.register_blueprint(alerts_bp, url_prefix='/api/alerts')
 
 
 # ==================
@@ -87,6 +89,7 @@ if __name__ == '__main__':
     print("  /api/          - Calls (call details, drill-downs)")
     print("  /api/churn/    - Churn Analytics")
     print("  /api/ml-quality/ - ML Quality Management")
+    print("  /api/alerts/   - Alert Configuration & History")
     print("  /api/          - New Features (heatmap, trends, products, etc.)")
     print("")
     print("=" * 50)
