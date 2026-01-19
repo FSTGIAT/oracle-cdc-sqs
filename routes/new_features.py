@@ -195,6 +195,7 @@ def api_products_daily_breakdown():
     """
     Get products mentioned in calls, broken down by day.
     """
+    import re
     days = request.args.get('days', 30, type=int)
 
     query = """
@@ -211,6 +212,34 @@ def api_products_daily_breakdown():
     """
 
     results = execute_query(query, {'days': days})
+
+    def normalize_product(product):
+        """Normalize product names - fix iPhone 7/12 to 17, convert Hebrew to English"""
+        if not product:
+            return None
+        p = product.strip()
+
+        # Skip junk entries
+        junk_patterns = [
+            r'^quantity\s*:\s*\d+',
+            r'^n/?a$', r'^na$', r'^none$', r'^:$',
+            r'^price(\s*:.*)?$', r'^name(\s*:.*)?$',
+            r'^model(\s*:.*)?$', r'^color(\s*:.*)?$'
+        ]
+        for pattern in junk_patterns:
+            if re.match(pattern, p.lower()):
+                return None
+
+        # Convert Hebrew iPhone variants to English
+        p = re.sub(r'(איי?פו?ן|איי?פ?פו?ן)', 'iphone', p, flags=re.IGNORECASE)
+
+        # Fix iPhone 7/12 to iPhone 17 (LLM confusion)
+        p = re.sub(r'iphone\s*(7|12)(?!\d)', 'iphone 17', p, flags=re.IGNORECASE)
+
+        # Clean up multiple spaces
+        p = re.sub(r'\s{2,}', ' ', p).strip()
+
+        return p if p else None
 
     # Parse and aggregate products by date
     dates_set = set()
@@ -234,9 +263,10 @@ def api_products_daily_breakdown():
             products = [products_raw.strip()] if products_raw.strip() else []
 
         for product in products:
-            if product:
-                products_by_date[call_date][product] += count
-                total_by_product[product] += count
+            normalized = normalize_product(product)
+            if normalized:
+                products_by_date[call_date][normalized] += count
+                total_by_product[normalized] += count
 
     # Sort dates
     sorted_dates = sorted(dates_set)
