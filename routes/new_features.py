@@ -303,56 +303,32 @@ def api_agent_performance():
     query = """
         SELECT
             PRODUCTS as queue_name,
-            SATISFACTION as satisfaction,
-            CHURN_SCORE as churn_score
+            COUNT(*) as call_count,
+            ROUND(AVG(SATISFACTION), 1) as avg_satisfaction,
+            ROUND(AVG(CHURN_SCORE), 0) as avg_churn_score
         FROM CONVERSATION_SUMMARY
         WHERE CONVERSATION_TIME > SYSDATE - :days
         AND PRODUCTS IS NOT NULL
         AND TRIM(PRODUCTS) IS NOT NULL
+        GROUP BY PRODUCTS
+        ORDER BY call_count DESC
+        FETCH FIRST :limit ROWS ONLY
     """
 
-    results = execute_query(query, {'days': days})
+    results = execute_query(query, {'days': days, 'limit': limit})
 
-    # Aggregate by normalized product name
-    product_stats = defaultdict(lambda: {'count': 0, 'satisfaction_sum': 0, 'satisfaction_count': 0, 'churn_sum': 0, 'churn_count': 0})
-
-    for row in results:
-        products_raw = row.get('queue_name', '') or ''
-        satisfaction = row.get('satisfaction')
-        churn_score = row.get('churn_score')
-
-        # Parse products (comma-separated or single value)
-        if ',' in products_raw:
-            products = [p.strip() for p in products_raw.split(',') if p.strip()]
-        else:
-            products = [products_raw.strip()] if products_raw.strip() else []
-
-        for product in products:
-            normalized = normalize_product(product)
-            if normalized:
-                product_stats[normalized]['count'] += 1
-                if satisfaction is not None:
-                    product_stats[normalized]['satisfaction_sum'] += satisfaction
-                    product_stats[normalized]['satisfaction_count'] += 1
-                if churn_score is not None:
-                    product_stats[normalized]['churn_sum'] += churn_score
-                    product_stats[normalized]['churn_count'] += 1
-
-    # Build results list
+    # Add display_name (normalized) while keeping queue_name (original) for drill-down
     queues = []
-    for name, stats in product_stats.items():
-        avg_sat = round(stats['satisfaction_sum'] / stats['satisfaction_count'], 1) if stats['satisfaction_count'] > 0 else None
-        avg_churn = round(stats['churn_sum'] / stats['churn_count'], 0) if stats['churn_count'] > 0 else None
+    for row in results:
+        queue_name = row.get('queue_name', '') or ''
+        display_name = normalize_product(queue_name) or queue_name
         queues.append({
-            'queue_name': name,
-            'call_count': stats['count'],
-            'avg_satisfaction': avg_sat,
-            'avg_churn_score': avg_churn
+            'queue_name': queue_name,  # Original - for drill-down queries
+            'display_name': display_name,  # Normalized - for chart display
+            'call_count': row.get('call_count', 0),
+            'avg_satisfaction': row.get('avg_satisfaction'),
+            'avg_churn_score': row.get('avg_churn_score')
         })
-
-    # Sort by call count and limit
-    queues.sort(key=lambda x: x['call_count'], reverse=True)
-    queues = queues[:limit]
 
     return jsonify({
         'queues': queues,

@@ -291,7 +291,7 @@ function renderAgentPerformanceChart(queues, ctx) {
     }
 
     // Horizontal bar chart - calls by product with satisfaction color coding
-    const labels = queues.map(d => d.queue_name || '');
+    const labels = queues.map(d => d.display_name || d.queue_name || '');
     const callCounts = queues.map(d => d.call_count || 0);
 
     // Color based on avg satisfaction (green=high, red=low)
