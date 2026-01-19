@@ -16,7 +16,7 @@
     --sidebar-text-muted: #94a3b8;
     --sidebar-active-bg: #0ea5e9;
     --sidebar-active-indicator: #38bdf8;
-    --sidebar-transition: 0.25s ease;
+    --sidebar-transition: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     --navbar-height: 56px;
 }
 
@@ -36,16 +36,18 @@
     height: calc(100vh - var(--navbar-height));
     width: var(--sidebar-width-collapsed);
     background: var(--sidebar-bg);
-    transition: width var(--sidebar-transition);
+    transition: width var(--sidebar-transition), box-shadow var(--sidebar-transition);
     z-index: 1000;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    will-change: width;
 }
 
 .sidebar:hover,
 .sidebar.expanded {
     width: var(--sidebar-width-expanded);
+    box-shadow: 4px 0 15px rgba(0, 0, 0, 0.3);
 }
 
 .sidebar-nav {
@@ -59,13 +61,8 @@
     margin-left: var(--sidebar-width-collapsed);
     flex: 1;
     padding: 1rem;
-    transition: margin-left var(--sidebar-transition);
     min-width: 0;
-}
-
-.sidebar:hover ~ .main-content,
-.sidebar.expanded ~ .main-content {
-    margin-left: var(--sidebar-width-expanded);
+    /* No transition - sidebar overlays instead of pushing */
 }
 
 /* ========================================
