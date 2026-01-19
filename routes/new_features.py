@@ -2,11 +2,41 @@
 New Features Routes - Heatmap, Trends, Products, Agent Performance, Customer Journey
 """
 
+import re
 from collections import defaultdict
 from flask import Blueprint, jsonify, request
 from . import execute_query, execute_single
 
 new_features_bp = Blueprint('new_features', __name__)
+
+
+def normalize_product(product):
+    """Normalize product names - fix iPhone 7/12 to 17, convert Hebrew to English"""
+    if not product:
+        return None
+    p = product.strip()
+
+    # Skip junk entries
+    junk_patterns = [
+        r'^quantity\s*:\s*\d+',
+        r'^n/?a$', r'^na$', r'^none$', r'^:$',
+        r'^price(\s*:.*)?$', r'^name(\s*:.*)?$',
+        r'^model(\s*:.*)?$', r'^color(\s*:.*)?$'
+    ]
+    for pattern in junk_patterns:
+        if re.match(pattern, p.lower()):
+            return None
+
+    # Convert Hebrew iPhone variants to English
+    p = re.sub(r'(איי?פו?ן|איי?פ?פו?ן)', 'iphone', p, flags=re.IGNORECASE)
+
+    # Fix iPhone 7/12 to iPhone 17 (LLM confusion)
+    p = re.sub(r'iphone\s*(7|12)(?!\d)', 'iphone 17', p, flags=re.IGNORECASE)
+
+    # Clean up multiple spaces
+    p = re.sub(r'\s{2,}', ' ', p).strip()
+
+    return p if p else None
 
 
 # ========================================
@@ -195,7 +225,6 @@ def api_products_daily_breakdown():
     """
     Get products mentioned in calls, broken down by day.
     """
-    import re
     days = request.args.get('days', 30, type=int)
 
     query = """
@@ -212,34 +241,6 @@ def api_products_daily_breakdown():
     """
 
     results = execute_query(query, {'days': days})
-
-    def normalize_product(product):
-        """Normalize product names - fix iPhone 7/12 to 17, convert Hebrew to English"""
-        if not product:
-            return None
-        p = product.strip()
-
-        # Skip junk entries
-        junk_patterns = [
-            r'^quantity\s*:\s*\d+',
-            r'^n/?a$', r'^na$', r'^none$', r'^:$',
-            r'^price(\s*:.*)?$', r'^name(\s*:.*)?$',
-            r'^model(\s*:.*)?$', r'^color(\s*:.*)?$'
-        ]
-        for pattern in junk_patterns:
-            if re.match(pattern, p.lower()):
-                return None
-
-        # Convert Hebrew iPhone variants to English
-        p = re.sub(r'(איי?פו?ן|איי?פ?פו?ן)', 'iphone', p, flags=re.IGNORECASE)
-
-        # Fix iPhone 7/12 to iPhone 17 (LLM confusion)
-        p = re.sub(r'iphone\s*(7|12)(?!\d)', 'iphone 17', p, flags=re.IGNORECASE)
-
-        # Clean up multiple spaces
-        p = re.sub(r'\s{2,}', ' ', p).strip()
-
-        return p if p else None
 
     # Parse and aggregate products by date
     dates_set = set()
@@ -302,22 +303,59 @@ def api_agent_performance():
     query = """
         SELECT
             PRODUCTS as queue_name,
-            COUNT(*) as call_count,
-            ROUND(AVG(SATISFACTION), 1) as avg_satisfaction,
-            ROUND(AVG(CHURN_SCORE), 0) as avg_churn_score
+            SATISFACTION as satisfaction,
+            CHURN_SCORE as churn_score
         FROM CONVERSATION_SUMMARY
         WHERE CONVERSATION_TIME > SYSDATE - :days
         AND PRODUCTS IS NOT NULL
         AND TRIM(PRODUCTS) IS NOT NULL
-        GROUP BY PRODUCTS
-        ORDER BY call_count DESC
-        FETCH FIRST :limit ROWS ONLY
     """
 
-    results = execute_query(query, {'days': days, 'limit': limit})
+    results = execute_query(query, {'days': days})
+
+    # Aggregate by normalized product name
+    product_stats = defaultdict(lambda: {'count': 0, 'satisfaction_sum': 0, 'satisfaction_count': 0, 'churn_sum': 0, 'churn_count': 0})
+
+    for row in results:
+        products_raw = row.get('queue_name', '') or ''
+        satisfaction = row.get('satisfaction')
+        churn_score = row.get('churn_score')
+
+        # Parse products (comma-separated or single value)
+        if ',' in products_raw:
+            products = [p.strip() for p in products_raw.split(',') if p.strip()]
+        else:
+            products = [products_raw.strip()] if products_raw.strip() else []
+
+        for product in products:
+            normalized = normalize_product(product)
+            if normalized:
+                product_stats[normalized]['count'] += 1
+                if satisfaction is not None:
+                    product_stats[normalized]['satisfaction_sum'] += satisfaction
+                    product_stats[normalized]['satisfaction_count'] += 1
+                if churn_score is not None:
+                    product_stats[normalized]['churn_sum'] += churn_score
+                    product_stats[normalized]['churn_count'] += 1
+
+    # Build results list
+    queues = []
+    for name, stats in product_stats.items():
+        avg_sat = round(stats['satisfaction_sum'] / stats['satisfaction_count'], 1) if stats['satisfaction_count'] > 0 else None
+        avg_churn = round(stats['churn_sum'] / stats['churn_count'], 0) if stats['churn_count'] > 0 else None
+        queues.append({
+            'queue_name': name,
+            'call_count': stats['count'],
+            'avg_satisfaction': avg_sat,
+            'avg_churn_score': avg_churn
+        })
+
+    # Sort by call count and limit
+    queues.sort(key=lambda x: x['call_count'], reverse=True)
+    queues = queues[:limit]
 
     return jsonify({
-        'queues': results if results else [],
+        'queues': queues,
         'days': days
     })
 
