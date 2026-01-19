@@ -456,13 +456,21 @@ def api_customer_journey():
             """
             status_info = execute_single(status_query, {'ban': ban})
 
+    # Calculate average churn score if there are calls with churn scores
+    avg_churn_score = None
+    if results:
+        churn_scores = [r.get('churn_score') for r in results if r.get('churn_score') is not None]
+        if churn_scores:
+            avg_churn_score = round(sum(churn_scores) / len(churn_scores), 1)
+
     return jsonify({
         'customer': {
             'subscriber_no': subscriber_no or (results[0].get('subscriber_no') if results else None),
             'ban': ban or (results[0].get('ban') if results else None),
             'status': status_info.get('sub_status') if status_info else 'Unknown',
             'product_code': status_info.get('product_code') if status_info else None,
-            'total_interactions': len(results)
+            'total_interactions': len(results),
+            'avg_churn_score': avg_churn_score
         },
         'timeline': results
     })

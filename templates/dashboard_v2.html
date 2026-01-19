@@ -11,6 +11,7 @@
 
     <!-- Dashboard CSS -->
     <link href="/static/css/dashboard.css" rel="stylesheet">
+    <link href="/static/css/sidebar.css" rel="stylesheet">
 </head>
 <body>
     <!-- Splash Screen -->
@@ -56,6 +57,11 @@
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">
+            <!-- Mobile menu toggle -->
+            <button class="btn btn-link text-white mobile-menu-toggle me-2" type="button">
+                <i class="bi bi-list fs-4"></i>
+            </button>
+
             <a class="navbar-brand" href="#">
                 <svg viewBox="0 0 180 60" class="navbar-logo">
                     <defs>
@@ -110,468 +116,610 @@
         </div>
     </nav>
 
-    <!-- Main Tabs -->
-    <ul class="nav nav-tabs mt-3 px-3" role="tablist">
-        <li class="nav-item">
-            <a class="nav-link active" id="analytics-tab" data-bs-toggle="tab" href="#analytics" role="tab">
-                <i class="bi bi-graph-up"></i> Analytics
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" id="mlquality-tab" data-bs-toggle="tab" href="#mlquality" role="tab">
-                <i class="bi bi-cpu"></i> ML Quality
-                <span class="badge bg-warning ms-1" id="pendingBadge" style="display: none;">0</span>
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" id="churnanalytics-tab" data-bs-toggle="tab" href="#churnanalytics" role="tab">
-                <i class="bi bi-person-x"></i> Churn Analytics
-            </a>
-        </li>
-    </ul>
+    <!-- Mobile sidebar overlay -->
+    <div class="sidebar-overlay"></div>
 
-    <div class="tab-content p-3">
-        <!-- ============================== -->
-        <!-- ANALYTICS TAB -->
-        <!-- ============================== -->
-        <div class="tab-pane fade show active" id="analytics" role="tabpanel">
-            <!-- KPI Cards - Single Row -->
-            <div class="row mb-3">
-                <div class="col">
-                    <div class="card text-center py-2">
-                        <div class="stat-value" id="totalConversations">-</div>
-                        <div class="stat-label">Total</div>
-                    </div>
-                </div>
-                <div class="col">
-                    <div class="card text-center py-2">
-                        <div class="stat-value text-primary" id="callCount">-</div>
-                        <div class="stat-label">Calls</div>
-                    </div>
-                </div>
-                <div class="col">
-                    <div class="card text-center py-2">
-                        <div class="stat-value text-success" id="whatsappCount">-</div>
-                        <div class="stat-label">WhatsApp</div>
-                    </div>
-                </div>
-                <div class="col">
-                    <div class="card text-center py-2">
-                        <div class="stat-value" id="avgSatisfaction">-</div>
-                        <div class="stat-label">Avg Sat.</div>
-                    </div>
-                </div>
-                <div class="col">
-                    <div class="card text-center py-2">
-                        <div class="stat-value text-success" id="positivePercent">-</div>
-                        <div class="stat-label">Positive</div>
-                    </div>
-                </div>
-                <div class="col">
-                    <div class="card text-center py-2">
-                        <div class="stat-value text-danger" id="avgChurn">-</div>
-                        <div class="stat-label">Avg Churn</div>
-                    </div>
-                </div>
-            </div>
+    <!-- Dashboard Container with Sidebar -->
+    <div class="dashboard-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <button class="sidebar-item active" data-section="analytics">
+                    <span class="sidebar-icon"><i class="bi bi-graph-up"></i></span>
+                    <span class="sidebar-text">Analytics</span>
+                </button>
 
-            <!-- Charts Row 1: Sentiment, Churn, Satisfaction -->
-            <div class="row mb-3">
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-header py-2">Sentiment</div>
-                        <div class="card-body p-2">
-                            <div class="chart-container clickable-chart" style="height: 200px;">
-                                <canvas id="sentimentChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-header py-2">Churn Risk</div>
-                        <div class="card-body p-2">
-                            <div class="chart-container clickable-chart" style="height: 200px;">
-                                <canvas id="churnChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-header py-2">Satisfaction</div>
-                        <div class="card-body p-2">
-                            <div class="chart-container" style="height: 200px;">
-                                <canvas id="satisfactionChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                <button class="sidebar-item" data-section="churnanalytics">
+                    <span class="sidebar-icon"><i class="bi bi-person-x"></i></span>
+                    <span class="sidebar-text">Churn Analytics</span>
+                </button>
 
-            <!-- Row 2: Heatmap and Categories -->
-            <div class="row mb-3">
-                <div class="col-md-5">
-                    <div class="card">
-                        <div class="card-header py-2">
-                            <i class="bi bi-grid-3x3"></i> Call Volume Heatmap
-                        </div>
-                        <div class="card-body p-2">
-                            <div class="heatmap-container" id="heatmapContainer">
-                                <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-7">
-                    <div class="card">
-                        <div class="card-header py-2">Top Categories</div>
-                        <div class="card-body p-2">
-                            <div class="chart-container clickable-chart" style="height: 280px;">
-                                <canvas id="categoriesChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                <div class="sidebar-divider"></div>
 
-            <!-- Row 3: Agent Performance and Products -->
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header py-2">
-                            <i class="bi bi-bar-chart"></i> Performance by Product
-                        </div>
-                        <div class="card-body p-2">
-                            <div class="chart-container" style="height: 250px;">
-                                <canvas id="agentPerformanceChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header py-2">
-                            <i class="bi bi-box-seam"></i> Products Breakdown
-                        </div>
-                        <div class="card-body p-2">
-                            <div class="chart-container" style="height: 220px;">
-                                <canvas id="productsChart"></canvas>
-                            </div>
-                            <div class="products-legend small" id="productsLegend"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                <button class="sidebar-item" data-section="alerts">
+                    <span class="sidebar-icon"><i class="bi bi-bell"></i></span>
+                    <span class="sidebar-text">Alerts</span>
+                    <span class="sidebar-badge badge-alert" style="display: none;">0</span>
+                </button>
 
-            <!-- Row 4: Recent Conversations Table -->
-            <div class="row">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header py-2 d-flex justify-content-between">
-                            <span>Recent Conversations</span>
-                            <span class="badge bg-secondary" id="errorCount">0 errors</span>
-                        </div>
-                        <div class="card-body p-0" style="max-height: 200px; overflow-y: auto;">
-                            <table class="table table-sm table-hover mb-0">
-                                <thead class="sticky-top bg-light">
-                                    <tr>
-                                        <th>Time</th>
-                                        <th>Type</th>
-                                        <th>Sentiment</th>
-                                        <th>Sat.</th>
-                                        <th>Churn</th>
-                                        <th>Summary</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="recentTable"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div><!-- End Analytics Tab -->
+                <button class="sidebar-item" data-section="mlquality">
+                    <span class="sidebar-icon"><i class="bi bi-cpu"></i></span>
+                    <span class="sidebar-text">ML Quality</span>
+                    <span class="sidebar-badge badge-warning" style="display: none;">0</span>
+                </button>
+            </nav>
+        </aside>
 
-        <!-- ============================== -->
-        <!-- ML QUALITY TAB -->
-        <!-- ============================== -->
-        <div class="tab-pane fade" id="mlquality" role="tabpanel">
-            <!-- ML Quality KPI Cards -->
-            <div class="row mb-4">
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <div class="stat-value text-primary" id="mlRecall">-</div>
-                            <div class="stat-label">Recall Rate</div>
-                        </div>
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- ============================== -->
+            <!-- ANALYTICS SECTION -->
+            <!-- ============================== -->
+            <section class="content-section active" data-section="analytics">
+                <!-- Active Alerts Banner (shows when alerts exist) -->
+                <div id="alertsBanner" class="alert alert-danger d-flex align-items-center mb-3" style="display: none !important;">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <div class="flex-grow-1">
+                        <strong id="alertsBannerCount">0</strong> active alert(s) require attention
                     </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="Sidebar.navigateToSection('alerts')">
+                        View Alerts
+                    </button>
                 </div>
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <div class="stat-value text-success" id="mlCoverage">-</div>
-                            <div class="stat-label">Coverage Rate</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <div class="stat-value text-warning" id="mlPending">-</div>
-                            <div class="stat-label">Pending Recommendations</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <div class="stat-value" id="mlFeedbackTotal">-</div>
-                            <div class="stat-label">Feedback Entries</div>
-                            <small class="text-muted" id="mlFeedbackCorrect">-</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            <div class="row">
-                <!-- Recommendations Panel -->
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <span><i class="bi bi-lightbulb"></i> Pending Recommendations</span>
-                            <button class="btn btn-sm btn-primary" id="applyToMlBtn" onclick="applyToML()">
-                                Apply Approved Configs to ML Service
-                            </button>
+                <!-- KPI Cards - Single Row -->
+                <div class="row mb-3">
+                    <div class="col">
+                        <div class="card text-center py-2">
+                            <div class="stat-value" id="totalConversations">-</div>
+                            <div class="stat-label">Total</div>
                         </div>
-                        <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                            <div id="recommendationsLoading" class="text-center py-4">
-                                <div class="spinner-border text-primary"></div>
-                                <p class="mt-2">Loading recommendations...</p>
-                            </div>
-                            <div id="recommendationsEmpty" class="text-center py-4 text-muted" style="display: none;">
-                                <i class="bi bi-check-circle" style="font-size: 2rem;"></i>
-                                <p class="mt-2">No pending recommendations</p>
-                            </div>
-                            <div id="recommendationsList"></div>
+                    </div>
+                    <div class="col">
+                        <div class="card text-center py-2">
+                            <div class="stat-value text-primary" id="callCount">-</div>
+                            <div class="stat-label">Calls</div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card text-center py-2">
+                            <div class="stat-value text-success" id="whatsappCount">-</div>
+                            <div class="stat-label">WhatsApp</div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card text-center py-2">
+                            <div class="stat-value" id="avgSatisfaction">-</div>
+                            <div class="stat-label">Avg Sat.</div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card text-center py-2">
+                            <div class="stat-value text-success" id="positivePercent">-</div>
+                            <div class="stat-label">Positive</div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="card text-center py-2">
+                            <div class="stat-value text-danger" id="avgChurn">-</div>
+                            <div class="stat-label">Avg Churn</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Evaluation History -->
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header"><i class="bi bi-graph-up"></i> Evaluation History</div>
-                        <div class="card-body">
-                            <div class="chart-container" style="height: 200px;">
-                                <canvas id="evalHistoryChart"></canvas>
-                            </div>
-                            <table class="table table-sm mt-3">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Churned</th>
-                                        <th>With Score</th>
-                                        <th>Recall%</th>
-                                        <th>Coverage%</th>
-                                        <th>Avg Score</th>
-                                        <th>Recs</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="evalHistoryTable"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div><!-- End ML Quality Tab -->
-
-        <!-- ============================== -->
-        <!-- CHURN ANALYTICS TAB -->
-        <!-- ============================== -->
-        <div class="tab-pane fade" id="churnanalytics" role="tabpanel">
-            <!-- Time Filter -->
-            <div class="d-flex justify-content-end mb-3">
-                <div class="input-group" style="width: auto;">
-                    <span class="input-group-text">Days</span>
-                    <input type="number" class="form-control form-control-sm" id="churnDaysFilter" value="180" min="1" max="365" style="width: 80px;">
-                    <button class="btn btn-sm btn-search-nav" onclick="reloadChurnAnalytics()">Apply</button>
-                </div>
-            </div>
-            <!-- Churn KPI Cards -->
-            <div class="row mb-4">
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <div class="stat-value text-primary" id="churnTotalPredictions">-</div>
-                            <div class="stat-label">Total Predictions (70+) <small class="text-muted" id="churnDaysLabel"></small></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <div class="stat-value text-danger" id="churnActualChurns">-</div>
-                            <div class="stat-label">Actual Churns</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <div class="stat-value text-success" id="churnAccuracyRate">-</div>
-                            <div class="stat-label">Accuracy Rate</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card text-center">
-                        <div class="card-body">
-                            <div class="stat-value text-warning" id="churnFalsePositives">-</div>
-                            <div class="stat-label">False Positives</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Row 1: Accuracy & By Product Charts -->
-            <div class="row mb-4">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">Prediction Accuracy</div>
-                        <div class="card-body">
-                            <div class="chart-container" style="height: 250px;">
-                                <canvas id="churnAccuracyChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">Churns by Product</div>
-                        <div class="card-body">
-                            <div class="chart-container" style="height: 250px;">
-                                <canvas id="churnByProductChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Row 2: Score Range Analysis -->
-            <div class="row mb-4">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">Accuracy by Score Range</div>
-                        <div class="card-body">
-                            <div class="chart-container" style="height: 300px;">
-                                <canvas id="churnScoreRangeChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">Score Range Breakdown</div>
-                        <div class="card-body">
-                            <table class="table table-sm table-striped" id="scoreRangeTable">
-                                <thead>
-                                    <tr>
-                                        <th>Score Range</th>
-                                        <th>Predictions</th>
-                                        <th>Actual Churns</th>
-                                        <th>Accuracy %</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Row 3: Trend Over Time -->
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <span>Churn Risk Trend Over Time</span>
-                            <select id="churnTrendDays" class="form-select form-select-sm" style="width: auto;">
-                                <option value="7">Last 7 Days</option>
-                                <option value="30" selected>Last 30 Days</option>
-                                <option value="90">Last 90 Days</option>
-                            </select>
-                        </div>
-                        <div class="card-body">
-                            <div class="chart-container" style="height: 300px;">
-                                <canvas id="churnTrendChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Row 4: High Risk Calls Table -->
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                <span class="fw-bold">High Risk Calls</span>
-                                <div class="d-flex align-items-center gap-2">
-                                    <label class="form-label mb-0 small text-muted">Score:</label>
-                                    <input type="number" id="minScoreFilter" class="form-control form-control-sm"
-                                           style="width: 65px;" min="0" max="100" value="70" placeholder="Min">
-                                    <span class="text-muted">-</span>
-                                    <input type="number" id="maxScoreFilter" class="form-control form-control-sm"
-                                           style="width: 65px;" min="0" max="100" value="100" placeholder="Max">
-                                    <button class="btn btn-sm btn-primary" onclick="loadHighRiskCalls(0)">
-                                        <i class="bi bi-funnel-fill"></i> Filter
-                                    </button>
+                <!-- Charts Row 1: Sentiment, Churn, Satisfaction -->
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header py-2">Sentiment</div>
+                            <div class="card-body p-2">
+                                <div class="chart-container clickable-chart" style="height: 200px;">
+                                    <canvas id="sentimentChart"></canvas>
                                 </div>
-                                <span class="badge bg-danger" id="highRiskCount">0</span>
                             </div>
                         </div>
-                        <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                            <table class="table table-sm table-hover" id="highRiskTable">
-                                <thead class="sticky-top bg-light">
-                                    <tr>
-                                        <th>Call ID</th>
-                                        <th>Date</th>
-                                        <th>Score</th>
-                                        <th>Subscriber</th>
-                                        <th>Status</th>
-                                        <th>Product</th>
-                                        <th>Summary</th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                        <div class="card-footer bg-light">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div class="text-muted small">
-                                    Showing <span id="highRiskShowing">0-0</span> of <span id="highRiskTotal">0</span>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header py-2">Churn Risk</div>
+                            <div class="card-body p-2">
+                                <div class="chart-container clickable-chart" style="height: 200px;">
+                                    <canvas id="churnChart"></canvas>
                                 </div>
-                                <nav>
-                                    <ul class="pagination pagination-sm mb-0">
-                                        <li class="page-item disabled" id="highRiskPrevPage">
-                                            <a class="page-link" href="#" onclick="changeHighRiskPage(-1); return false;">Previous</a>
-                                        </li>
-                                        <li class="page-item disabled">
-                                            <span class="page-link" id="highRiskPageInfo">1 / 1</span>
-                                        </li>
-                                        <li class="page-item disabled" id="highRiskNextPage">
-                                            <a class="page-link" href="#" onclick="changeHighRiskPage(1); return false;">Next</a>
-                                        </li>
-                                    </ul>
-                                </nav>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header py-2">Satisfaction</div>
+                            <div class="card-body p-2">
+                                <div class="chart-container" style="height: 200px;">
+                                    <canvas id="satisfactionChart"></canvas>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div><!-- End Churn Analytics Tab -->
-    </div><!-- End Tab Content -->
+
+                <!-- Row 2: Heatmap and Categories -->
+                <div class="row mb-3">
+                    <div class="col-md-5">
+                        <div class="card">
+                            <div class="card-header py-2">
+                                <i class="bi bi-grid-3x3"></i> Call Volume Heatmap
+                            </div>
+                            <div class="card-body p-2">
+                                <div class="heatmap-container" id="heatmapContainer">
+                                    <div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-7">
+                        <div class="card">
+                            <div class="card-header py-2">Top Categories</div>
+                            <div class="card-body p-2">
+                                <div class="chart-container clickable-chart" style="height: 280px;">
+                                    <canvas id="categoriesChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 3: Agent Performance and Products -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header py-2">
+                                <i class="bi bi-bar-chart"></i> Performance by Product
+                            </div>
+                            <div class="card-body p-2">
+                                <div class="chart-container" style="height: 250px;">
+                                    <canvas id="agentPerformanceChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header py-2">
+                                <i class="bi bi-box-seam"></i> Products Breakdown
+                            </div>
+                            <div class="card-body p-2">
+                                <div class="chart-container" style="height: 220px;">
+                                    <canvas id="productsChart"></canvas>
+                                </div>
+                                <div class="products-legend small" id="productsLegend"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 4: Recent Conversations Table -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header py-2 d-flex justify-content-between">
+                                <span>Recent Conversations</span>
+                                <span class="badge bg-secondary" id="errorCount">0 errors</span>
+                            </div>
+                            <div class="card-body p-0" style="max-height: 200px; overflow-y: auto;">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead class="sticky-top bg-light">
+                                        <tr>
+                                            <th>Time</th>
+                                            <th>Type</th>
+                                            <th>Sentiment</th>
+                                            <th>Sat.</th>
+                                            <th>Churn</th>
+                                            <th>Summary</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="recentTable"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section><!-- End Analytics Section -->
+
+            <!-- ============================== -->
+            <!-- ML QUALITY SECTION -->
+            <!-- ============================== -->
+            <section class="content-section" data-section="mlquality">
+                <!-- ML Quality KPI Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-primary" id="mlRecall">-</div>
+                                <div class="stat-label">Recall Rate</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-success" id="mlCoverage">-</div>
+                                <div class="stat-label">Coverage Rate</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-warning" id="mlPending">-</div>
+                                <div class="stat-label">Pending Recommendations</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value" id="mlFeedbackTotal">-</div>
+                                <div class="stat-label">Feedback Entries</div>
+                                <small class="text-muted" id="mlFeedbackCorrect">-</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- Recommendations Panel -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-lightbulb"></i> Pending Recommendations</span>
+                                <button class="btn btn-sm btn-primary" id="applyToMlBtn" onclick="applyToML()">
+                                    Apply Approved Configs to ML Service
+                                </button>
+                            </div>
+                            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                                <div id="recommendationsLoading" class="text-center py-4">
+                                    <div class="spinner-border text-primary"></div>
+                                    <p class="mt-2">Loading recommendations...</p>
+                                </div>
+                                <div id="recommendationsEmpty" class="text-center py-4 text-muted" style="display: none;">
+                                    <i class="bi bi-check-circle" style="font-size: 2rem;"></i>
+                                    <p class="mt-2">No pending recommendations</p>
+                                </div>
+                                <div id="recommendationsList"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Evaluation History -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header"><i class="bi bi-graph-up"></i> Evaluation History</div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 200px;">
+                                    <canvas id="evalHistoryChart"></canvas>
+                                </div>
+                                <table class="table table-sm mt-3">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Churned</th>
+                                            <th>With Score</th>
+                                            <th>Recall%</th>
+                                            <th>Coverage%</th>
+                                            <th>Avg Score</th>
+                                            <th>Recs</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="evalHistoryTable"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section><!-- End ML Quality Section -->
+
+            <!-- ============================== -->
+            <!-- CHURN ANALYTICS SECTION -->
+            <!-- ============================== -->
+            <section class="content-section" data-section="churnanalytics">
+                <!-- Time Filter -->
+                <div class="d-flex justify-content-end mb-3">
+                    <div class="input-group" style="width: auto;">
+                        <span class="input-group-text">Days</span>
+                        <input type="number" class="form-control form-control-sm" id="churnDaysFilter" value="180" min="1" max="365" style="width: 80px;">
+                        <button class="btn btn-sm btn-search-nav" onclick="reloadChurnAnalytics()">Apply</button>
+                    </div>
+                </div>
+                <!-- Churn KPI Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-primary" id="churnTotalPredictions">-</div>
+                                <div class="stat-label">Total Predictions (70+) <small class="text-muted" id="churnDaysLabel"></small></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-danger" id="churnActualChurns">-</div>
+                                <div class="stat-label">Actual Churns</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-success" id="churnAccuracyRate">-</div>
+                                <div class="stat-label">Accuracy Rate</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-warning" id="churnFalsePositives">-</div>
+                                <div class="stat-label">False Positives</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 1: Accuracy & By Product Charts -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Prediction Accuracy</div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 250px;">
+                                    <canvas id="churnAccuracyChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Churns by Product</div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 250px;">
+                                    <canvas id="churnByProductChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 2: Score Range Analysis -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Accuracy by Score Range</div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 300px;">
+                                    <canvas id="churnScoreRangeChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Score Range Breakdown</div>
+                            <div class="card-body">
+                                <table class="table table-sm table-striped" id="scoreRangeTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Score Range</th>
+                                            <th>Predictions</th>
+                                            <th>Actual Churns</th>
+                                            <th>Accuracy %</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 3: Trend Over Time -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Churn Risk Trend Over Time</span>
+                                <select id="churnTrendDays" class="form-select form-select-sm" style="width: auto;">
+                                    <option value="7">Last 7 Days</option>
+                                    <option value="30" selected>Last 30 Days</option>
+                                    <option value="90">Last 90 Days</option>
+                                </select>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container" style="height: 300px;">
+                                    <canvas id="churnTrendChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 4: High Risk Calls Table -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <span class="fw-bold">High Risk Calls</span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <label class="form-label mb-0 small text-muted">Score:</label>
+                                        <input type="number" id="minScoreFilter" class="form-control form-control-sm"
+                                               style="width: 65px;" min="0" max="100" value="70" placeholder="Min">
+                                        <span class="text-muted">-</span>
+                                        <input type="number" id="maxScoreFilter" class="form-control form-control-sm"
+                                               style="width: 65px;" min="0" max="100" value="100" placeholder="Max">
+                                        <button class="btn btn-sm btn-primary" onclick="loadHighRiskCalls(0)">
+                                            <i class="bi bi-funnel-fill"></i> Filter
+                                        </button>
+                                    </div>
+                                    <span class="badge bg-danger" id="highRiskCount">0</span>
+                                </div>
+                            </div>
+                            <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                                <table class="table table-sm table-hover" id="highRiskTable">
+                                    <thead class="sticky-top bg-light">
+                                        <tr>
+                                            <th>Call ID</th>
+                                            <th>Date</th>
+                                            <th>Score</th>
+                                            <th>Subscriber</th>
+                                            <th>Status</th>
+                                            <th>Product</th>
+                                            <th>Summary</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <div class="card-footer bg-light">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="text-muted small">
+                                        Showing <span id="highRiskShowing">0-0</span> of <span id="highRiskTotal">0</span>
+                                    </div>
+                                    <nav>
+                                        <ul class="pagination pagination-sm mb-0">
+                                            <li class="page-item disabled" id="highRiskPrevPage">
+                                                <a class="page-link" href="#" onclick="changeHighRiskPage(-1); return false;">Previous</a>
+                                            </li>
+                                            <li class="page-item disabled">
+                                                <span class="page-link" id="highRiskPageInfo">1 / 1</span>
+                                            </li>
+                                            <li class="page-item disabled" id="highRiskNextPage">
+                                                <a class="page-link" href="#" onclick="changeHighRiskPage(1); return false;">Next</a>
+                                            </li>
+                                        </ul>
+                                    </nav>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section><!-- End Churn Analytics Section -->
+
+            <!-- ============================== -->
+            <!-- ALERTS SECTION -->
+            <!-- ============================== -->
+            <section class="content-section" data-section="alerts">
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="mb-0"><i class="bi bi-bell me-2"></i>Alerts</h4>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-secondary btn-sm" id="evaluateAlertsBtn" onclick="evaluateAlerts()" title="Check alerts now">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="showCreateAlertModal()" title="New rule">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Alerts KPI Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-danger" id="alertsActiveCount">0</div>
+                                <div class="stat-label">Active Alerts</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-warning" id="alertsCriticalCount">0</div>
+                                <div class="stat-label">Critical</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-primary" id="alertsRulesCount">0</div>
+                                <div class="stat-label">Enabled Rules</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value" id="alerts24hCount">0</div>
+                                <div class="stat-label">Alerts (24h)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- Active Alerts Panel -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-exclamation-triangle me-1"></i> Active Alerts
+                            </div>
+                            <div class="card-body" style="max-height: 350px; overflow-y: auto;">
+                                <div id="activeAlertsEmpty" class="text-center py-4 text-muted" style="display: none;">
+                                    <i class="bi bi-check-circle" style="font-size: 2rem;"></i>
+                                    <p class="mt-2">No active alerts</p>
+                                </div>
+                                <div id="activeAlertsList"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Alert Rules Panel -->
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-sliders me-1"></i> Alert Rules
+                            </div>
+                            <div class="card-body p-0" style="max-height: 350px; overflow-y: auto;">
+                                <div id="alertRulesList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alert History -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-clock-history me-1"></i> Alert History</span>
+                                <select class="form-select form-select-sm" style="width: auto;" onchange="loadAlertHistory(this.value)">
+                                    <option value="7" selected>Last 7 Days</option>
+                                    <option value="30">Last 30 Days</option>
+                                    <option value="90">Last 90 Days</option>
+                                </select>
+                            </div>
+                            <div class="card-body p-0" style="max-height: 300px; overflow-y: auto;">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead class="sticky-top bg-light">
+                                        <tr>
+                                            <th>Time</th>
+                                            <th>Alert</th>
+                                            <th>Value</th>
+                                            <th>Severity</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="alertHistoryTable"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section><!-- End Alerts Section -->
+
+        </main><!-- End Main Content -->
+    </div><!-- End Dashboard Container -->
 
     <!-- ============================== -->
     <!-- MODALS -->
@@ -866,6 +1014,7 @@
                         <i class="bi bi-clock-history"></i> Customer Journey
                         <span class="ms-2">Subscriber: <span id="journeySubscriberNo">-</span></span>
                         <span class="badge bg-light text-info ms-2" id="journeyTotalCalls">0 calls</span>
+                        <span class="badge ms-2" id="journeyAvgChurn" style="display: none;">Avg Churn: -</span>
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
@@ -881,17 +1030,142 @@
         </div>
     </div>
 
+    <!-- Affected Subscribers Modal -->
+    <div class="modal fade" id="subscribersModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-people me-2"></i>
+                        <span id="subscribersAlertName">Alert</span>
+                        <span class="badge bg-light text-danger ms-2" id="subscribersCount">0</span> Affected
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="subscribersLoading" class="text-center py-4">
+                        <div class="spinner-border text-danger"></div>
+                        <p class="mt-2">Loading affected subscribers...</p>
+                    </div>
+                    <div id="subscribersContent" style="display: none;">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Subscriber</th>
+                                        <th>Product</th>
+                                        <th>Churn Score</th>
+                                        <th>Last Call</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="subscribersTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Form Modal -->
+    <div class="modal fade" id="alertFormModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white py-2">
+                    <h6 class="modal-title mb-0" id="alertModalTitle">New Alert</h6>
+                    <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="alertForm">
+                        <input type="hidden" id="alertFormAlertId">
+
+                        <div class="mb-3">
+                            <label class="form-label small text-muted mb-1">Name</label>
+                            <input type="text" class="form-control form-control-sm" id="alertFormName" required placeholder="High Risk Spike">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small text-muted mb-1">Metric</label>
+                            <select class="form-select form-select-sm" id="alertMetricSelect" required>
+                                <option value="">Select metric...</option>
+                            </select>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <label class="form-label small text-muted mb-1">When</label>
+                                <select class="form-select form-select-sm" id="alertFormOperator" required>
+                                    <option value="gt">&gt; Greater</option>
+                                    <option value="gte">&ge; Greater/Equal</option>
+                                    <option value="lt">&lt; Less</option>
+                                    <option value="lte">&le; Less/Equal</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small text-muted mb-1">Value</label>
+                                <input type="number" class="form-control form-control-sm" id="alertFormThreshold" required placeholder="50">
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <label class="form-label small text-muted mb-1">Severity</label>
+                                <select class="form-select form-select-sm" id="alertFormSeverity" required>
+                                    <option value="INFO">Info</option>
+                                    <option value="WARNING" selected>Warning</option>
+                                    <option value="CRITICAL">Critical</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small text-muted mb-1">Hours</label>
+                                <input type="number" class="form-control form-control-sm" id="alertFormTimeWindow" value="24" min="1" max="720">
+                            </div>
+                        </div>
+
+                        <!-- Advanced options (collapsed) -->
+                        <div class="mb-2">
+                            <a class="small text-muted" data-bs-toggle="collapse" href="#alertAdvanced" role="button">
+                                <i class="bi bi-chevron-down"></i> More options
+                            </a>
+                        </div>
+                        <div class="collapse" id="alertAdvanced">
+                            <div class="mb-3">
+                                <label class="form-label small text-muted mb-1">Product Filter</label>
+                                <input type="text" class="form-control form-control-sm" id="alertFormProduct" placeholder="IZI, PELE...">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted mb-1">Hebrew Name</label>
+                                <input type="text" class="form-control form-control-sm" id="alertFormNameHe" dir="rtl">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted mb-1">Notes</label>
+                                <textarea class="form-control form-control-sm" id="alertFormDescription" rows="2"></textarea>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="saveAlertRule()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <!-- Dashboard Modules -->
     <script src="/static/js/utils.js"></script>
+    <script src="/static/js/sidebar.js"></script>
     <script src="/static/js/charts.js"></script>
     <script src="/static/js/modals.js"></script>
     <script src="/static/js/feedback.js"></script>
     <script src="/static/js/ml-quality.js"></script>
     <script src="/static/js/churn-analytics.js"></script>
+    <script src="/static/js/alerts.js"></script>
     <script src="/static/js/new-features.js"></script>
     <script src="/static/js/app.js"></script>
 </body>

@@ -304,6 +304,27 @@ async function showCustomerJourney(subscriberNo, ban) {
         document.getElementById('journeySubscriberNo').textContent = subscriberNo || journey.customer?.subscriber_no || '-';
         document.getElementById('journeyTotalCalls').textContent = `${journey.customer?.total_interactions || journey.timeline.length} calls`;
 
+        // Update avg churn badge - only show when 2+ calls
+        const avgChurnBadge = document.getElementById('journeyAvgChurn');
+        const totalCalls = journey.customer?.total_interactions || journey.timeline.length;
+        const avgChurn = journey.customer?.avg_churn_score;
+
+        if (avgChurnBadge && totalCalls >= 2 && avgChurn !== null && avgChurn !== undefined) {
+            avgChurnBadge.textContent = `Avg Churn: ${avgChurn}`;
+            avgChurnBadge.style.display = 'inline';
+
+            // Set color based on risk level
+            if (avgChurn >= 70) {
+                avgChurnBadge.className = 'badge ms-2 bg-danger';
+            } else if (avgChurn >= 40) {
+                avgChurnBadge.className = 'badge ms-2 bg-warning text-dark';
+            } else {
+                avgChurnBadge.className = 'badge ms-2 bg-success';
+            }
+        } else if (avgChurnBadge) {
+            avgChurnBadge.style.display = 'none';
+        }
+
         // Render timeline
         container.innerHTML = journey.timeline.map((call, index) => {
             let churnClass = 'churn-low';
