@@ -1118,8 +1118,14 @@
                                 </select>
                             </div>
                             <div class="col-6">
-                                <label class="form-label small text-muted mb-1">Hours</label>
-                                <input type="number" class="form-control form-control-sm" id="alertFormTimeWindow" value="24" min="1" max="720">
+                                <label class="form-label small text-muted mb-1">Time Window</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" class="form-control form-control-sm" id="alertFormTimeValue" value="24" min="1" max="720">
+                                    <select class="form-select form-select-sm" id="alertFormTimeUnit" style="max-width: 80px;">
+                                        <option value="hours" selected>Hours</option>
+                                        <option value="days">Days</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
 

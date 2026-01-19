@@ -461,6 +461,8 @@ function showCreateAlertModal() {
     // Reset form
     document.getElementById('alertForm').reset();
     document.getElementById('alertFormAlertId').value = '';
+    document.getElementById('alertFormTimeValue').value = '24';
+    document.getElementById('alertFormTimeUnit').value = 'hours';
     document.getElementById('alertModalTitle').textContent = 'Create Alert Rule';
 
     const modal = new bootstrap.Modal(document.getElementById('alertFormModal'));
@@ -481,7 +483,17 @@ function editAlertRule(alertId) {
     document.getElementById('alertMetricSelect').value = `${config.metric_source}|${config.metric_name}`;
     document.getElementById('alertFormOperator').value = config.condition_operator || 'gt';
     document.getElementById('alertFormThreshold').value = config.threshold_value || '';
-    document.getElementById('alertFormTimeWindow').value = config.time_window_hours || 24;
+
+    // Convert hours to days if divisible by 24 and >= 24
+    const hours = config.time_window_hours || 24;
+    if (hours >= 24 && hours % 24 === 0) {
+        document.getElementById('alertFormTimeValue').value = hours / 24;
+        document.getElementById('alertFormTimeUnit').value = 'days';
+    } else {
+        document.getElementById('alertFormTimeValue').value = hours;
+        document.getElementById('alertFormTimeUnit').value = 'hours';
+    }
+
     document.getElementById('alertFormProduct').value = config.filter_product || '';
     document.getElementById('alertFormSeverity').value = config.severity || 'WARNING';
     document.getElementById('alertFormDescription').value = config.description || '';
@@ -506,6 +518,11 @@ async function saveAlertRule() {
 
     const [metricSource, metricName] = metricValue.split('|');
 
+    // Convert time value to hours
+    const timeValue = parseInt(document.getElementById('alertFormTimeValue').value);
+    const timeUnit = document.getElementById('alertFormTimeUnit').value;
+    const timeWindowHours = timeUnit === 'days' ? timeValue * 24 : timeValue;
+
     const data = {
         alert_name: document.getElementById('alertFormName').value,
         alert_name_he: document.getElementById('alertFormNameHe').value,
@@ -513,7 +530,7 @@ async function saveAlertRule() {
         metric_name: metricName,
         condition_operator: document.getElementById('alertFormOperator').value,
         threshold_value: parseFloat(document.getElementById('alertFormThreshold').value),
-        time_window_hours: parseInt(document.getElementById('alertFormTimeWindow').value),
+        time_window_hours: timeWindowHours,
         filter_product: document.getElementById('alertFormProduct').value || null,
         severity: document.getElementById('alertFormSeverity').value,
         description: document.getElementById('alertFormDescription').value
