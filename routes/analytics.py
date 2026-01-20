@@ -52,23 +52,21 @@ def api_categories():
 
 @analytics_bp.route('/sentiment')
 def api_sentiment():
-    """Get sentiment breakdown"""
+    """Get sentiment breakdown - Negative (1-2) and Other (3-5)"""
     days = request.args.get('days', 7, type=int)
 
     query = """
         SELECT
             CASE
-                WHEN SENTIMENT >= 4 THEN 'Positive'
                 WHEN SENTIMENT <= 2 THEN 'Negative'
-                ELSE 'Neutral'
+                ELSE 'Other'
             END as sentiment,
             COUNT(*) as count
         FROM CONVERSATION_SUMMARY
         WHERE CONVERSATION_TIME > SYSDATE - :days
         GROUP BY CASE
-            WHEN SENTIMENT >= 4 THEN 'Positive'
             WHEN SENTIMENT <= 2 THEN 'Negative'
-            ELSE 'Neutral'
+            ELSE 'Other'
         END
     """
 
@@ -78,25 +76,24 @@ def api_sentiment():
 
 @analytics_bp.route('/churn')
 def api_churn():
-    """Get churn risk distribution"""
+    """Get churn risk distribution - Critical (95-100) and High Risk (90-94)"""
     days = request.args.get('days', 7, type=int)
 
     query = """
         SELECT
             CASE
-                WHEN CHURN_SCORE >= 70 THEN 'High Risk (70+)'
-                WHEN CHURN_SCORE >= 40 THEN 'Medium Risk (40-69)'
-                ELSE 'Low Risk (0-39)'
+                WHEN CHURN_SCORE >= 95 THEN 'Critical (95-100)'
+                WHEN CHURN_SCORE >= 90 THEN 'High Risk (90-94)'
             END as risk_level,
             COUNT(*) as count
         FROM CONVERSATION_SUMMARY
         WHERE CONVERSATION_TIME > SYSDATE - :days
+        AND CHURN_SCORE >= 90
         GROUP BY CASE
-            WHEN CHURN_SCORE >= 70 THEN 'High Risk (70+)'
-            WHEN CHURN_SCORE >= 40 THEN 'Medium Risk (40-69)'
-            ELSE 'Low Risk (0-39)'
+            WHEN CHURN_SCORE >= 95 THEN 'Critical (95-100)'
+            WHEN CHURN_SCORE >= 90 THEN 'High Risk (90-94)'
         END
-        ORDER BY risk_level
+        ORDER BY risk_level DESC
     """
 
     results = execute_query(query, {'days': days})

@@ -46,12 +46,11 @@ def api_sentiment_calls():
     limit = request.args.get('limit', 50, type=int)
 
     # Map sentiment type to query condition (SENTIMENT is numeric 1-5 scale)
-    if sentiment_type == 'Positive':
-        sentiment_condition = "SENTIMENT >= 4"
-    elif sentiment_type == 'Negative':
+    # New categories: Negative (1-2) and Other (3-5)
+    if sentiment_type == 'Negative':
         sentiment_condition = "SENTIMENT <= 2"
-    else:
-        sentiment_condition = "(SENTIMENT = 3 OR SENTIMENT IS NULL)"
+    else:  # 'Other' or any other value
+        sentiment_condition = "(SENTIMENT >= 3 OR SENTIMENT IS NULL)"
 
     query = f"""
         SELECT
@@ -83,12 +82,13 @@ def api_churn_calls():
     limit = request.args.get('limit', 50, type=int)
 
     # Map risk level to score range
-    if 'High' in risk_level or '70' in risk_level:
-        score_condition = "CHURN_SCORE >= 70"
-    elif 'Medium' in risk_level or '40' in risk_level:
-        score_condition = "CHURN_SCORE >= 40 AND CHURN_SCORE < 70"
+    # New categories: Critical (95-100) and High Risk (90-94)
+    if 'Critical' in risk_level or '95' in risk_level:
+        score_condition = "CHURN_SCORE >= 95"
+    elif 'High' in risk_level or '90' in risk_level:
+        score_condition = "CHURN_SCORE >= 90 AND CHURN_SCORE < 95"
     else:
-        score_condition = "CHURN_SCORE < 40 OR CHURN_SCORE IS NULL"
+        score_condition = "CHURN_SCORE >= 90"  # Default to all high-risk
 
     query = f"""
         SELECT

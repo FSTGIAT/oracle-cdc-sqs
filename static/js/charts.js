@@ -93,7 +93,7 @@ function initCharts() {
 
 // Update sentiment chart with data
 function updateSentimentChart(sentimentData) {
-    const colorMap = { 'Positive': '#28a745', 'Negative': '#dc3545', 'Neutral': '#6c757d' };
+    const colorMap = { 'Negative': '#dc3545', 'Other': '#6c757d' };
     sentimentLabels = sentimentData.map(s => s.sentiment);
     sentimentChart.data.labels = sentimentLabels;
     sentimentChart.data.datasets[0].data = sentimentData.map(s => s.count);
@@ -103,7 +103,7 @@ function updateSentimentChart(sentimentData) {
 
 // Update churn chart with data
 function updateChurnChart(churnData) {
-    const colorMap = { 'High Risk (70+)': '#dc3545', 'Medium Risk (40-69)': '#ffc107', 'Low Risk (0-39)': '#28a745' };
+    const colorMap = { 'Critical (95-100)': '#8b0000', 'High Risk (90-94)': '#dc3545' };
     churnLabels = churnData.map(c => c.risk_level);
     churnChart.data.labels = churnLabels;
     churnChart.data.datasets[0].data = churnData.map(c => c.count);
