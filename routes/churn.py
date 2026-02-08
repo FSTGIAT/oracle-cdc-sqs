@@ -88,10 +88,9 @@ def api_churn_by_score_range():
     call_type_filter = build_call_type_filter(call_type, 'cs')
 
     ranges = [
-        {'label': '90-100 (Critical)', 'min': 90, 'max': 100},
-        {'label': '70-90 (High)', 'min': 70, 'max': 89},
-        {'label': '40-70 (Medium)', 'min': 40, 'max': 69},
-        {'label': '0-40 (Low)', 'min': 0, 'max': 39},
+        {'label': '95-100 (Critical)', 'min': 95, 'max': 100},
+        {'label': '90-95 (High)', 'min': 90, 'max': 94},
+        {'label': '0-90 (Other)', 'min': 0, 'max': 89},
     ]
 
     results = []
