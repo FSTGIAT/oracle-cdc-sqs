@@ -5,6 +5,20 @@
 
 const API_BASE = '';
 
+// ========================================
+// CALL TYPE STATE (Service/Sales)
+// ========================================
+let currentCallType = 'service';
+
+function getCallType() {
+    return currentCallType;
+}
+
+function setCallType(type) {
+    currentCallType = type;
+    document.dispatchEvent(new CustomEvent('callTypeChanged', { detail: { type } }));
+}
+
 // Escape HTML to prevent XSS
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -67,10 +81,38 @@ function debounce(func, wait) {
     };
 }
 
-// Get time filter value
+// Get time filter value (converts to days)
 function getTimeFilterDays() {
-    const el = document.getElementById('timeFilter');
-    return el ? parseInt(el.value, 10) : 7;
+    const mode = document.getElementById('timeFilterMode')?.value || 'quick';
+
+    if (mode === 'range') {
+        const startEl = document.getElementById('timeFilterStart');
+        const endEl = document.getElementById('timeFilterEnd');
+
+        if (startEl?.value && endEl?.value) {
+            const startDate = new Date(startEl.value);
+            const endDate = new Date(endEl.value);
+            const diffMs = endDate.getTime() - startDate.getTime();
+            const diffDays = diffMs / (1000 * 60 * 60 * 24);
+            return Math.max(diffDays, 0.01);  // Minimum ~15 minutes
+        }
+    }
+
+    // Quick select mode
+    const valueEl = document.getElementById('timeFilterValue');
+    const unitEl = document.getElementById('timeFilterUnit');
+
+    const value = parseFloat(valueEl?.value) || 24;
+    const unit = unitEl?.value || 'hours';
+
+    switch (unit) {
+        case 'minutes':
+            return value / (24 * 60);  // Convert minutes to days
+        case 'hours':
+            return value / 24;  // Convert hours to days
+        default:
+            return value;  // Already in days
+    }
 }
 
 // Show loading spinner in element

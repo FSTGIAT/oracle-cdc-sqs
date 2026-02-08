@@ -5,7 +5,7 @@ New Features Routes - Heatmap, Trends, Products, Agent Performance, Customer Jou
 import re
 from collections import defaultdict
 from flask import Blueprint, jsonify, request
-from . import execute_query, execute_single
+from . import execute_query, execute_single, build_call_type_filter
 
 new_features_bp = Blueprint('new_features', __name__)
 
@@ -50,15 +50,19 @@ def api_heatmap_call_volume():
     Returns data for heatmap visualization.
     """
     days = request.args.get('days', 30, type=int)
+    call_type = request.args.get('call_type', 'service')
 
-    query = """
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
         SELECT
-            TO_CHAR(CONVERSATION_TIME, 'D') - 1 as day_of_week,
-            TO_NUMBER(TO_CHAR(CONVERSATION_TIME, 'HH24')) as hour,
+            TO_CHAR(cs.CONVERSATION_TIME, 'D') - 1 as day_of_week,
+            TO_NUMBER(TO_CHAR(cs.CONVERSATION_TIME, 'HH24')) as hour,
             COUNT(*) as count
-        FROM CONVERSATION_SUMMARY
-        WHERE CONVERSATION_TIME > SYSDATE - :days
-        GROUP BY TO_CHAR(CONVERSATION_TIME, 'D'), TO_CHAR(CONVERSATION_TIME, 'HH24')
+        FROM CONVERSATION_SUMMARY cs
+        WHERE cs.CONVERSATION_TIME > SYSDATE - :days
+        {call_type_filter}
+        GROUP BY TO_CHAR(cs.CONVERSATION_TIME, 'D'), TO_CHAR(cs.CONVERSATION_TIME, 'HH24')
         ORDER BY day_of_week, hour
     """
 
@@ -92,21 +96,25 @@ def api_heatmap_drilldown():
     hour = request.args.get('hour', 0, type=int)  # 0-23
     days = request.args.get('days', 30, type=int)
     limit = request.args.get('limit', 50, type=int)
+    call_type = request.args.get('call_type', 'service')
 
-    query = """
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
         SELECT
-            SOURCE_ID as call_id,
-            SOURCE_TYPE as type,
-            TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
-            SUMMARY as summary,
-            SENTIMENT as sentiment,
-            SATISFACTION as satisfaction,
-            ROUND(CHURN_SCORE, 1) as churn_score
-        FROM CONVERSATION_SUMMARY
-        WHERE CONVERSATION_TIME > SYSDATE - :days
-        AND TO_CHAR(CONVERSATION_TIME, 'D') - 1 = :day_of_week
-        AND TO_NUMBER(TO_CHAR(CONVERSATION_TIME, 'HH24')) = :hour
-        ORDER BY CONVERSATION_TIME DESC
+            cs.SOURCE_ID as call_id,
+            cs.SOURCE_TYPE as type,
+            TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
+            cs.SUMMARY as summary,
+            cs.SENTIMENT as sentiment,
+            cs.SATISFACTION as satisfaction,
+            ROUND(cs.CHURN_SCORE, 1) as churn_score
+        FROM CONVERSATION_SUMMARY cs
+        WHERE cs.CONVERSATION_TIME > SYSDATE - :days
+        AND TO_CHAR(cs.CONVERSATION_TIME, 'D') - 1 = :day_of_week
+        AND TO_NUMBER(TO_CHAR(cs.CONVERSATION_TIME, 'HH24')) = :hour
+        {call_type_filter}
+        ORDER BY cs.CONVERSATION_TIME DESC
         FETCH FIRST :limit ROWS ONLY
     """
 
@@ -132,36 +140,43 @@ def api_trends_comparison():
     """
     current_days = request.args.get('current_days', 7, type=int)
     compare_days = request.args.get('compare_days', 7, type=int)
+    call_type = request.args.get('call_type', 'service')
+
+    call_type_filter = build_call_type_filter(call_type, 'cs', ':days')
 
     # Current period stats
-    current_query = """
+    current_query = f"""
         SELECT
             COUNT(*) as total_calls,
-            ROUND(AVG(SATISFACTION), 2) as avg_satisfaction,
-            ROUND(AVG(CHURN_SCORE), 1) as avg_churn_score,
-            COUNT(CASE WHEN SENTIMENT >= 4 THEN 1 END) as positive,
-            COUNT(CASE WHEN SENTIMENT <= 2 THEN 1 END) as negative,
-            COUNT(CASE WHEN SENTIMENT = 3 OR SENTIMENT IS NULL THEN 1 END) as neutral,
-            MIN(TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD')) as start_date,
-            MAX(TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD')) as end_date
-        FROM CONVERSATION_SUMMARY
-        WHERE CONVERSATION_TIME > SYSDATE - :days
+            ROUND(AVG(cs.SATISFACTION), 2) as avg_satisfaction,
+            ROUND(AVG(cs.CHURN_SCORE), 1) as avg_churn_score,
+            COUNT(CASE WHEN cs.SENTIMENT >= 4 THEN 1 END) as positive,
+            COUNT(CASE WHEN cs.SENTIMENT <= 2 THEN 1 END) as negative,
+            COUNT(CASE WHEN cs.SENTIMENT = 3 OR cs.SENTIMENT IS NULL THEN 1 END) as neutral,
+            MIN(TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD')) as start_date,
+            MAX(TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD')) as end_date
+        FROM CONVERSATION_SUMMARY cs
+        WHERE cs.CONVERSATION_TIME > SYSDATE - :days
+        {call_type_filter}
     """
     current = execute_single(current_query, {'days': current_days})
 
-    # Previous period stats
-    previous_query = """
+    # Previous period stats - use different filter for BETWEEN clause
+    call_type_filter_prev = build_call_type_filter(call_type, 'cs', ':current_days + :compare_days')
+
+    previous_query = f"""
         SELECT
             COUNT(*) as total_calls,
-            ROUND(AVG(SATISFACTION), 2) as avg_satisfaction,
-            ROUND(AVG(CHURN_SCORE), 1) as avg_churn_score,
-            COUNT(CASE WHEN SENTIMENT >= 4 THEN 1 END) as positive,
-            COUNT(CASE WHEN SENTIMENT <= 2 THEN 1 END) as negative,
-            COUNT(CASE WHEN SENTIMENT = 3 OR SENTIMENT IS NULL THEN 1 END) as neutral,
-            MIN(TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD')) as start_date,
-            MAX(TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD')) as end_date
-        FROM CONVERSATION_SUMMARY
-        WHERE CONVERSATION_TIME BETWEEN SYSDATE - :current_days - :compare_days AND SYSDATE - :current_days
+            ROUND(AVG(cs.SATISFACTION), 2) as avg_satisfaction,
+            ROUND(AVG(cs.CHURN_SCORE), 1) as avg_churn_score,
+            COUNT(CASE WHEN cs.SENTIMENT >= 4 THEN 1 END) as positive,
+            COUNT(CASE WHEN cs.SENTIMENT <= 2 THEN 1 END) as negative,
+            COUNT(CASE WHEN cs.SENTIMENT = 3 OR cs.SENTIMENT IS NULL THEN 1 END) as neutral,
+            MIN(TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD')) as start_date,
+            MAX(TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD')) as end_date
+        FROM CONVERSATION_SUMMARY cs
+        WHERE cs.CONVERSATION_TIME BETWEEN SYSDATE - :current_days - :compare_days AND SYSDATE - :current_days
+        {call_type_filter_prev}
     """
     previous = execute_single(previous_query, {
         'current_days': current_days,
@@ -226,18 +241,22 @@ def api_products_daily_breakdown():
     Get products mentioned in calls, broken down by day.
     """
     days = request.args.get('days', 30, type=int)
+    call_type = request.args.get('call_type', 'service')
 
-    query = """
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
         SELECT
-            TO_CHAR(TRUNC(CONVERSATION_TIME), 'YYYY-MM-DD') as call_date,
-            PRODUCTS as products_raw,
+            TO_CHAR(TRUNC(cs.CONVERSATION_TIME), 'YYYY-MM-DD') as call_date,
+            cs.PRODUCTS as products_raw,
             COUNT(*) as count
-        FROM CONVERSATION_SUMMARY
-        WHERE CONVERSATION_TIME > SYSDATE - :days
-        AND PRODUCTS IS NOT NULL
-        AND TRIM(PRODUCTS) IS NOT NULL
-        GROUP BY TRUNC(CONVERSATION_TIME), PRODUCTS
-        ORDER BY TRUNC(CONVERSATION_TIME)
+        FROM CONVERSATION_SUMMARY cs
+        WHERE cs.CONVERSATION_TIME > SYSDATE - :days
+        AND cs.PRODUCTS IS NOT NULL
+        AND TRIM(cs.PRODUCTS) IS NOT NULL
+        {call_type_filter}
+        GROUP BY TRUNC(cs.CONVERSATION_TIME), cs.PRODUCTS
+        ORDER BY TRUNC(cs.CONVERSATION_TIME)
     """
 
     results = execute_query(query, {'days': days})
@@ -299,18 +318,22 @@ def api_agent_performance():
     """
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 10, type=int)
+    call_type = request.args.get('call_type', 'service')
 
-    query = """
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
         SELECT
-            PRODUCTS as queue_name,
+            cs.PRODUCTS as queue_name,
             COUNT(*) as call_count,
-            ROUND(AVG(SATISFACTION), 1) as avg_satisfaction,
-            ROUND(AVG(CHURN_SCORE), 0) as avg_churn_score
-        FROM CONVERSATION_SUMMARY
-        WHERE CONVERSATION_TIME > SYSDATE - :days
-        AND PRODUCTS IS NOT NULL
-        AND TRIM(PRODUCTS) IS NOT NULL
-        GROUP BY PRODUCTS
+            ROUND(AVG(cs.SATISFACTION), 1) as avg_satisfaction,
+            ROUND(AVG(cs.CHURN_SCORE), 0) as avg_churn_score
+        FROM CONVERSATION_SUMMARY cs
+        WHERE cs.CONVERSATION_TIME > SYSDATE - :days
+        AND cs.PRODUCTS IS NOT NULL
+        AND TRIM(cs.PRODUCTS) IS NOT NULL
+        {call_type_filter}
+        GROUP BY cs.PRODUCTS
         ORDER BY call_count DESC
         FETCH FIRST :limit ROWS ONLY
     """
@@ -344,43 +367,48 @@ def api_agent_performance_calls():
     queue_name = request.args.get('queue_name', '')
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 50, type=int)
+    call_type = request.args.get('call_type', 'service')
 
     if not queue_name:
         return jsonify([])
 
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
     # Handle 'Unknown' which means NULL products
     if queue_name == 'Unknown':
-        query = """
+        query = f"""
             SELECT
-                SOURCE_ID as call_id,
-                SOURCE_TYPE as type,
-                TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
-                SUMMARY as summary,
-                SENTIMENT as sentiment,
-                SATISFACTION as satisfaction,
-                ROUND(CHURN_SCORE, 1) as churn_score
-            FROM CONVERSATION_SUMMARY
-            WHERE PRODUCTS IS NULL
-            AND CONVERSATION_TIME > SYSDATE - :days
-            ORDER BY CONVERSATION_TIME DESC
+                cs.SOURCE_ID as call_id,
+                cs.SOURCE_TYPE as type,
+                TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
+                cs.SUMMARY as summary,
+                cs.SENTIMENT as sentiment,
+                cs.SATISFACTION as satisfaction,
+                ROUND(cs.CHURN_SCORE, 1) as churn_score
+            FROM CONVERSATION_SUMMARY cs
+            WHERE cs.PRODUCTS IS NULL
+            AND cs.CONVERSATION_TIME > SYSDATE - :days
+            {call_type_filter}
+            ORDER BY cs.CONVERSATION_TIME DESC
             FETCH FIRST :limit ROWS ONLY
         """
         results = execute_query(query, {'days': days, 'limit': limit})
     else:
         # Match exact product or product in comma-separated list
-        query = """
+        query = f"""
             SELECT
-                SOURCE_ID as call_id,
-                SOURCE_TYPE as type,
-                TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
-                SUMMARY as summary,
-                SENTIMENT as sentiment,
-                SATISFACTION as satisfaction,
-                ROUND(CHURN_SCORE, 1) as churn_score
-            FROM CONVERSATION_SUMMARY
-            WHERE PRODUCTS = :product_name
-            AND CONVERSATION_TIME > SYSDATE - :days
-            ORDER BY CONVERSATION_TIME DESC
+                cs.SOURCE_ID as call_id,
+                cs.SOURCE_TYPE as type,
+                TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
+                cs.SUMMARY as summary,
+                cs.SENTIMENT as sentiment,
+                cs.SATISFACTION as satisfaction,
+                ROUND(cs.CHURN_SCORE, 1) as churn_score
+            FROM CONVERSATION_SUMMARY cs
+            WHERE cs.PRODUCTS = :product_name
+            AND cs.CONVERSATION_TIME > SYSDATE - :days
+            {call_type_filter}
+            ORDER BY cs.CONVERSATION_TIME DESC
             FETCH FIRST :limit ROWS ONLY
         """
         results = execute_query(query, {

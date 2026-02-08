@@ -28,6 +28,7 @@ function initModals() {
 // Show calls for a category
 async function showCategoryCalls(category) {
     const days = getTimeFilterDays();
+    const callType = getCallType();
     document.getElementById('categoryModalTitle').textContent = `Category: ${category}`;
     document.getElementById('categoryCallsLoading').style.display = 'block';
     document.getElementById('categoryCallsTable').style.display = 'none';
@@ -35,7 +36,7 @@ async function showCategoryCalls(category) {
     categoryModal.show();
 
     try {
-        const calls = await fetch(`${API_BASE}/api/category/calls?category=${encodeURIComponent(category)}&days=${days}`).then(r => r.json());
+        const calls = await fetch(`${API_BASE}/api/category/calls?category=${encodeURIComponent(category)}&days=${days}&call_type=${callType}`).then(r => r.json());
         document.getElementById('categoryCallCount').textContent = calls.length;
 
         document.getElementById('categoryCallsBody').innerHTML = calls.map(c => {
@@ -69,6 +70,7 @@ async function showCategoryCalls(category) {
 // Show calls for a sentiment type
 async function showSentimentCalls(sentimentType) {
     const days = getTimeFilterDays();
+    const callType = getCallType();
 
     let badgeClass = 'bg-secondary';
     if (sentimentType === 'Positive') badgeClass = 'bg-success';
@@ -81,7 +83,7 @@ async function showSentimentCalls(sentimentType) {
     categoryModal.show();
 
     try {
-        const calls = await fetch(`${API_BASE}/api/sentiment/calls?sentiment=${encodeURIComponent(sentimentType)}&days=${days}`).then(r => r.json());
+        const calls = await fetch(`${API_BASE}/api/sentiment/calls?sentiment=${encodeURIComponent(sentimentType)}&days=${days}&call_type=${callType}`).then(r => r.json());
         document.getElementById('categoryCallCount').textContent = calls.length;
 
         document.getElementById('categoryCallsBody').innerHTML = calls.map(c => {
@@ -115,6 +117,7 @@ async function showSentimentCalls(sentimentType) {
 // Show calls for a churn risk level
 async function showChurnRiskCalls(riskLevel) {
     const days = getTimeFilterDays();
+    const callType = getCallType();
 
     let badgeClass = 'bg-success';
     if (riskLevel.includes('High')) badgeClass = 'bg-danger';
@@ -127,7 +130,7 @@ async function showChurnRiskCalls(riskLevel) {
     categoryModal.show();
 
     try {
-        const calls = await fetch(`${API_BASE}/api/churn/calls?risk_level=${encodeURIComponent(riskLevel)}&days=${days}`).then(r => r.json());
+        const calls = await fetch(`${API_BASE}/api/churn/calls?risk_level=${encodeURIComponent(riskLevel)}&days=${days}&call_type=${callType}`).then(r => r.json());
         document.getElementById('categoryCallCount').textContent = calls.length;
 
         document.getElementById('categoryCallsBody').innerHTML = calls.map(c => {

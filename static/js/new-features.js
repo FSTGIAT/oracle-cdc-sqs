@@ -12,7 +12,8 @@ let productsChartInstance, agentPerformanceChartInstance;
 async function loadTrendComparisons() {
     try {
         const days = getTimeFilterDays();
-        const response = await fetch(`${API_BASE}/api/trends/comparison?current_days=${days}&compare_days=${days}`);
+        const callType = getCallType();
+        const response = await fetch(`${API_BASE}/api/trends/comparison?current_days=${days}&compare_days=${days}&call_type=${callType}`);
         const data = await response.json();
 
         // Update trend cards
@@ -50,7 +51,8 @@ async function loadHeatmap() {
 
     try {
         const days = getTimeFilterDays();
-        const response = await fetch(`${API_BASE}/api/heatmap/call-volume?days=${days}`);
+        const callType = getCallType();
+        const response = await fetch(`${API_BASE}/api/heatmap/call-volume?days=${days}&call_type=${callType}`);
         const data = await response.json();
 
         renderHeatmap(data.data, data.max_count);
@@ -116,6 +118,7 @@ function getHeatmapColor(intensity) {
 
 async function drillDownHeatmap(dayOfWeek, hour) {
     const days = getTimeFilterDays();
+    const callType = getCallType();
     document.getElementById('categoryModalTitle').textContent =
         `Calls on ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek]} at ${hour}:00`;
     document.getElementById('categoryCallsLoading').style.display = 'block';
@@ -125,7 +128,7 @@ async function drillDownHeatmap(dayOfWeek, hour) {
 
     try {
         const response = await fetch(
-            `${API_BASE}/api/heatmap/drill-down?day_of_week=${dayOfWeek}&hour=${hour}&days=${days}`
+            `${API_BASE}/api/heatmap/drill-down?day_of_week=${dayOfWeek}&hour=${hour}&days=${days}&call_type=${callType}`
         );
         const calls = await response.json();
 
@@ -170,7 +173,8 @@ async function loadProductsBreakdown() {
 
     try {
         const days = getTimeFilterDays();
-        const response = await fetch(`${API_BASE}/api/products/daily-breakdown?days=${days}`);
+        const callType = getCallType();
+        const response = await fetch(`${API_BASE}/api/products/daily-breakdown?days=${days}&call_type=${callType}`);
         const data = await response.json();
 
         renderProductsChart(data);
@@ -258,8 +262,9 @@ async function loadAgentPerformance() {
 
     try {
         const days = getTimeFilterDays();
-        console.log('Loading agent performance for', days, 'days');
-        const response = await fetch(`${API_BASE}/api/agent-performance?days=${days}`);
+        const callType = getCallType();
+        console.log('Loading agent performance for', days, 'days', callType);
+        const response = await fetch(`${API_BASE}/api/agent-performance?days=${days}&call_type=${callType}`);
 
         if (!response.ok) {
             console.error('Agent performance API error:', response.status, response.statusText);
@@ -343,6 +348,7 @@ function renderAgentPerformanceChart(queues, ctx) {
 
 async function drillDownAgentPerformance(queueName) {
     const days = getTimeFilterDays();
+    const callType = getCallType();
     document.getElementById('categoryModalTitle').textContent = `Queue: ${queueName}`;
     document.getElementById('categoryCallsLoading').style.display = 'block';
     document.getElementById('categoryCallsTable').style.display = 'none';
@@ -351,7 +357,7 @@ async function drillDownAgentPerformance(queueName) {
 
     try {
         const response = await fetch(
-            `${API_BASE}/api/agent-performance/calls?queue_name=${encodeURIComponent(queueName)}&days=${days}`
+            `${API_BASE}/api/agent-performance/calls?queue_name=${encodeURIComponent(queueName)}&days=${days}&call_type=${callType}`
         );
         const calls = await response.json();
 

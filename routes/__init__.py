@@ -58,3 +58,30 @@ def execute_single(query, params=None):
     """Execute query and return single row as dict"""
     results = execute_query(query, params)
     return results[0] if results else {}
+
+
+def build_call_type_filter(call_type, table_alias='cs', days_param=':days'):
+    """
+    Build EXISTS filter for service/sales separation.
+
+    Args:
+        call_type: 'service', 'sales', or 'all'/None
+        table_alias: Table alias for CONVERSATION_SUMMARY (default: 'cs')
+        days_param: Parameter name for days filter (default: ':days')
+
+    Returns:
+        SQL fragment with EXISTS clause, or empty string for 'all'
+    """
+    if not call_type or call_type == 'all':
+        return ''
+
+    operator = 'NOT IN' if call_type == 'service' else 'IN'
+    return f"""
+        AND EXISTS (
+            SELECT 1
+            FROM VERINT_TEXT_ANALYSIS v
+            WHERE v.CALL_ID = {table_alias}.SOURCE_ID
+            AND v.CALL_TIME > SYSDATE - {days_param}
+            AND v.QUEUE_NAME {operator} (SELECT sq.QUEUE_NAME FROM SALES_QUEUE sq)
+        )
+    """

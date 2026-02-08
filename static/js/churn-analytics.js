@@ -12,29 +12,18 @@ let highRiskCurrentPage = 0;
 let highRiskPageSize = 25;
 let highRiskTotalPages = 1;
 
-// Get days filter value (default 180)
-function getChurnDays() {
-    const input = document.getElementById('churnDaysFilter');
-    return input ? parseInt(input.value) || 180 : 180;
-}
-
-// Reload churn analytics with current filter
-function reloadChurnAnalytics() {
-    churnAnalyticsLoaded = false;
-    loadChurnAnalytics();
-}
-
 // Load all churn analytics data
 async function loadChurnAnalytics() {
-    const days = getChurnDays();
-    console.log(`Loading churn analytics for ${days} days...`);
+    const days = getTimeFilterDays();
+    const callType = getCallType();
+    console.log(`Loading churn analytics for ${days} days (${callType})...`);
     try {
         const [accuracyRes, productRes, rangeRes, trendRes, highRiskRes] = await Promise.all([
-            fetch(`${API_BASE}/api/churn/accuracy?days=${days}`),
-            fetch(`${API_BASE}/api/churn/by-product?days=${days}`),
-            fetch(`${API_BASE}/api/churn/by-score-range?days=${days}`),
-            fetch(`${API_BASE}/api/churn/trend?days=${days}`),
-            fetch(`${API_BASE}/api/churn/high-risk-calls?days=${days}&limit=100`)
+            fetch(`${API_BASE}/api/churn/accuracy?days=${days}&call_type=${callType}`),
+            fetch(`${API_BASE}/api/churn/by-product?days=${days}&call_type=${callType}`),
+            fetch(`${API_BASE}/api/churn/by-score-range?days=${days}&call_type=${callType}`),
+            fetch(`${API_BASE}/api/churn/trend?days=${days}&call_type=${callType}`),
+            fetch(`${API_BASE}/api/churn/high-risk-calls?days=${days}&limit=100&call_type=${callType}`)
         ]);
 
         const accuracy = await accuracyRes.json();
@@ -44,8 +33,6 @@ async function loadChurnAnalytics() {
         const highRisk = await highRiskRes.json();
 
         // === KPI Cards ===
-        const daysLabel = document.getElementById('churnDaysLabel');
-        if (daysLabel) daysLabel.textContent = `(${days}d)`;
         document.getElementById('churnTotalPredictions').textContent = formatNumber(accuracy.total_predictions);
         document.getElementById('churnActualChurns').textContent = formatNumber(accuracy.actual_churns);
         document.getElementById('churnAccuracyRate').textContent = (accuracy.accuracy_rate || 0) + '%';
@@ -111,11 +98,11 @@ async function loadChurnAnalytics() {
             }
         });
 
-        // === Score Range Table ===
+        // === Score Range Table (clickable) ===
         const tableBody = document.querySelector('#scoreRangeTable tbody');
         if (tableBody) {
             tableBody.innerHTML = ranges.map(r => `
-                <tr>
+                <tr class="call-row" style="cursor: pointer;" onclick="showScoreRangeCalls(${r.min_score}, ${r.max_score}, '${escapeHtml(r.label)}')">
                     <td><strong>${r.label}</strong></td>
                     <td>${formatNumber(r.predictions)}</td>
                     <td>${formatNumber(r.actual_churns)}</td>
@@ -182,31 +169,67 @@ function renderChurnTrendChart(trend) {
     });
 }
 
-// Load churn trend with different days
-async function loadChurnTrend(days) {
-    try {
-        const res = await fetch(`${API_BASE}/api/churn/trend?days=${days}`);
-        const trend = await res.json();
-        renderChurnTrendChart(trend);
-    } catch (error) {
-        console.error('Error loading churn trend:', error);
-    }
-}
-
 // Load high risk calls with filters
 async function loadHighRiskCalls(page = 0) {
     const minScore = document.getElementById('minScoreFilter')?.value || 70;
     const maxScore = document.getElementById('maxScoreFilter')?.value || 100;
     const offset = page * highRiskPageSize;
+    const callType = getCallType();
 
     try {
         const res = await fetch(
-            `${API_BASE}/api/churn/high-risk-calls?days=7&min_score=${minScore}&max_score=${maxScore}&offset=${offset}&limit=${highRiskPageSize}`
+            `${API_BASE}/api/churn/high-risk-calls?days=7&min_score=${minScore}&max_score=${maxScore}&offset=${offset}&limit=${highRiskPageSize}&call_type=${callType}`
         );
         const result = await res.json();
         renderHighRiskCalls(result);
     } catch (error) {
         console.error('Error loading high risk calls:', error);
+    }
+}
+
+// Show calls for a specific score range (drill-down from score range table)
+async function showScoreRangeCalls(minScore, maxScore, label) {
+    const days = getTimeFilterDays();
+    const callType = getCallType();
+
+    document.getElementById('categoryModalTitle').innerHTML = `<span class="badge bg-danger me-2">Churn Score</span> ${label}`;
+    document.getElementById('categoryCallsLoading').style.display = 'block';
+    document.getElementById('categoryCallsTable').style.display = 'none';
+
+    categoryModal.show();
+
+    try {
+        const calls = await fetch(
+            `${API_BASE}/api/churn/by-score-range/calls?min_score=${minScore}&max_score=${maxScore}&days=${days}&call_type=${callType}`
+        ).then(r => r.json());
+
+        document.getElementById('categoryCallCount').textContent = calls.length;
+
+        document.getElementById('categoryCallsBody').innerHTML = calls.map(c => {
+            const callId = escapeHtml(String(c.call_id || ''));
+            const summary = c.summary ? String(c.summary) : '';
+            return `
+            <tr class="call-row" onclick="showCallDetails('${callId}')">
+                <td><code class="text-primary">${callId || '-'}</code></td>
+                <td><span class="badge ${c.type === 'CALL' ? 'bg-primary' : 'bg-success'}">${c.type || '-'}</span></td>
+                <td>${c.created || '-'}</td>
+                <td>${getSentimentBadge(c.sentiment)}</td>
+                <td>${c.satisfaction || '-'}</td>
+                <td>${getChurnBadge(c.churn_score)}</td>
+                <td class="summary-preview" title="${escapeHtml(summary)}">${summary.substring(0, 60)}...</td>
+            </tr>
+            `;
+        }).join('');
+
+        document.getElementById('categoryCallsLoading').style.display = 'none';
+        document.getElementById('categoryCallsTable').style.display = 'table';
+    } catch (error) {
+        console.error('Error loading score range calls:', error);
+        document.getElementById('categoryCallsBody').innerHTML = `
+            <tr><td colspan="7" class="text-center text-danger">Error loading calls</td></tr>
+        `;
+        document.getElementById('categoryCallsLoading').style.display = 'none';
+        document.getElementById('categoryCallsTable').style.display = 'table';
     }
 }
 

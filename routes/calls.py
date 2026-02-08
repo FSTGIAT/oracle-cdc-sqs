@@ -3,7 +3,7 @@ Calls Routes - Call details, conversation transcript, drill-down endpoints
 """
 
 from flask import Blueprint, jsonify, request
-from . import execute_query, execute_single, get_connection
+from . import execute_query, execute_single, get_connection, build_call_type_filter
 
 calls_bp = Blueprint('calls', __name__)
 
@@ -14,8 +14,11 @@ def api_category_calls():
     category = request.args.get('category', '')
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 50, type=int)
+    call_type = request.args.get('call_type', 'service')
 
-    query = """
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
         SELECT
             cc.SOURCE_ID as call_id,
             cc.SOURCE_TYPE as type,
@@ -30,6 +33,7 @@ def api_category_calls():
         LEFT JOIN CONVERSATION_SUMMARY cs ON cc.SOURCE_ID = cs.SOURCE_ID AND cc.SOURCE_TYPE = cs.SOURCE_TYPE
         WHERE cc.CATEGORY_CODE = :category
         AND cs.CONVERSATION_TIME > SYSDATE - :days
+        {call_type_filter}
         ORDER BY cs.CONVERSATION_TIME DESC
         FETCH FIRST :limit ROWS ONLY
     """
@@ -44,29 +48,33 @@ def api_sentiment_calls():
     sentiment_type = request.args.get('sentiment', '')
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 50, type=int)
+    call_type = request.args.get('call_type', 'service')
+
+    call_type_filter = build_call_type_filter(call_type, 'cs')
 
     # Map sentiment type to query condition (SENTIMENT is numeric 1-5 scale)
     # New categories: Negative (1-2) and Other (3-5)
     if sentiment_type == 'Negative':
-        sentiment_condition = "SENTIMENT <= 2"
+        sentiment_condition = "cs.SENTIMENT <= 2"
     else:  # 'Other' or any other value
-        sentiment_condition = "(SENTIMENT >= 3 OR SENTIMENT IS NULL)"
+        sentiment_condition = "(cs.SENTIMENT >= 3 OR cs.SENTIMENT IS NULL)"
 
     query = f"""
         SELECT
-            SOURCE_ID as call_id,
-            SOURCE_TYPE as type,
-            TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
-            SUMMARY as summary,
-            SENTIMENT as sentiment,
-            SATISFACTION as satisfaction,
-            ROUND(CHURN_SCORE, 1) as churn_score,
-            PRODUCTS as products,
-            ACTION_ITEMS as action_items
-        FROM CONVERSATION_SUMMARY
+            cs.SOURCE_ID as call_id,
+            cs.SOURCE_TYPE as type,
+            TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
+            cs.SUMMARY as summary,
+            cs.SENTIMENT as sentiment,
+            cs.SATISFACTION as satisfaction,
+            ROUND(cs.CHURN_SCORE, 1) as churn_score,
+            cs.PRODUCTS as products,
+            cs.ACTION_ITEMS as action_items
+        FROM CONVERSATION_SUMMARY cs
         WHERE {sentiment_condition}
-        AND CONVERSATION_TIME > SYSDATE - :days
-        ORDER BY CONVERSATION_TIME DESC
+        AND cs.CONVERSATION_TIME > SYSDATE - :days
+        {call_type_filter}
+        ORDER BY cs.CONVERSATION_TIME DESC
         FETCH FIRST :limit ROWS ONLY
     """
 
@@ -80,31 +88,35 @@ def api_churn_calls():
     risk_level = request.args.get('risk_level', '')
     days = request.args.get('days', 7, type=int)
     limit = request.args.get('limit', 50, type=int)
+    call_type = request.args.get('call_type', 'service')
+
+    call_type_filter = build_call_type_filter(call_type, 'cs')
 
     # Map risk level to score range
     # New categories: Critical (95-100) and High Risk (90-94)
     if 'Critical' in risk_level or '95' in risk_level:
-        score_condition = "CHURN_SCORE >= 95"
+        score_condition = "cs.CHURN_SCORE >= 95"
     elif 'High' in risk_level or '90' in risk_level:
-        score_condition = "CHURN_SCORE >= 90 AND CHURN_SCORE < 95"
+        score_condition = "cs.CHURN_SCORE >= 90 AND cs.CHURN_SCORE < 95"
     else:
-        score_condition = "CHURN_SCORE >= 90"  # Default to all high-risk
+        score_condition = "cs.CHURN_SCORE >= 90"  # Default to all high-risk
 
     query = f"""
         SELECT
-            SOURCE_ID as call_id,
-            SOURCE_TYPE as type,
-            TO_CHAR(CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
-            SUMMARY as summary,
-            SENTIMENT as sentiment,
-            SATISFACTION as satisfaction,
-            ROUND(CHURN_SCORE, 1) as churn_score,
-            PRODUCTS as products,
-            ACTION_ITEMS as action_items
-        FROM CONVERSATION_SUMMARY
+            cs.SOURCE_ID as call_id,
+            cs.SOURCE_TYPE as type,
+            TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
+            cs.SUMMARY as summary,
+            cs.SENTIMENT as sentiment,
+            cs.SATISFACTION as satisfaction,
+            ROUND(cs.CHURN_SCORE, 1) as churn_score,
+            cs.PRODUCTS as products,
+            cs.ACTION_ITEMS as action_items
+        FROM CONVERSATION_SUMMARY cs
         WHERE ({score_condition})
-        AND CONVERSATION_TIME > SYSDATE - :days
-        ORDER BY CHURN_SCORE DESC NULLS LAST, CONVERSATION_TIME DESC
+        AND cs.CONVERSATION_TIME > SYSDATE - :days
+        {call_type_filter}
+        ORDER BY cs.CHURN_SCORE DESC NULLS LAST, cs.CONVERSATION_TIME DESC
         FETCH FIRST :limit ROWS ONLY
     """
 

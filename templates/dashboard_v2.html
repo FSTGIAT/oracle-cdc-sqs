@@ -102,15 +102,65 @@
                 </svg>
             </a>
             <div class="d-flex align-items-center">
-                <button class="btn btn-outline-light btn-sm me-3" onclick="showCustomerLookup()" title="Customer Lookup">
+                <button class="btn btn-outline-light btn-sm me-2" onclick="showCustomerLookup()" title="Customer Lookup">
                     <i class="bi bi-search"></i>
                 </button>
-                <select class="form-select form-select-sm me-3" id="timeFilter" style="width: auto;">
-                    <option value="1">Last 24 Hours</option>
-                    <option value="7" selected>Last 7 Days</option>
-                    <option value="30">Last 30 Days</option>
-                    <option value="90">Last 90 Days</option>
-                </select>
+
+                <!-- Service/Sales Toggle (icon-only) -->
+                <div class="btn-group btn-group-sm me-2" role="group" id="callTypeToggle" title="Service / Sales">
+                    <button type="button" class="btn btn-outline-light active" data-call-type="service" title="Service Calls">
+                        <i class="bi bi-headset"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-light" data-call-type="sales" title="Sales Calls">
+                        <i class="bi bi-cart3"></i>
+                    </button>
+                </div>
+
+                <!-- Kibana-style Time Picker -->
+                <div class="dropdown me-3">
+                    <button class="btn btn-outline-light btn-sm dropdown-toggle d-flex align-items-center" type="button" id="timePickerBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                        <i class="bi bi-calendar3 me-2"></i>
+                        <span id="timePickerLabel">Last 24 hours</span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end time-picker-dropdown p-3" style="min-width: 320px;">
+                        <!-- Quick Select -->
+                        <div class="mb-3">
+                            <label class="form-label small text-muted mb-1">Quick select</label>
+                            <div class="d-flex flex-wrap gap-1">
+                                <button class="btn btn-sm btn-outline-secondary time-quick-btn" data-value="30" data-unit="minutes">30m</button>
+                                <button class="btn btn-sm btn-outline-secondary time-quick-btn" data-value="1" data-unit="hours">1h</button>
+                                <button class="btn btn-sm btn-outline-secondary time-quick-btn" data-value="4" data-unit="hours">4h</button>
+                                <button class="btn btn-sm btn-outline-secondary time-quick-btn active" data-value="24" data-unit="hours">24h</button>
+                                <button class="btn btn-sm btn-outline-secondary time-quick-btn" data-value="7" data-unit="days">7d</button>
+                                <button class="btn btn-sm btn-outline-secondary time-quick-btn" data-value="30" data-unit="days">30d</button>
+                                <button class="btn btn-sm btn-outline-secondary time-quick-btn" data-value="90" data-unit="days">90d</button>
+                            </div>
+                        </div>
+                        <hr class="my-2">
+                        <!-- Date Range Picker -->
+                        <div class="mb-2">
+                            <label class="form-label small text-muted mb-1">Date range</label>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label small mb-1">Start</label>
+                                    <input type="datetime-local" class="form-control form-control-sm" id="timeFilterStart">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small mb-1">End</label>
+                                    <input type="datetime-local" class="form-control form-control-sm" id="timeFilterEnd">
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Hidden fields for quick select values -->
+                        <input type="hidden" id="timeFilterValue" value="24">
+                        <input type="hidden" id="timeFilterUnit" value="hours">
+                        <input type="hidden" id="timeFilterMode" value="quick">
+                        <button class="btn btn-primary btn-sm w-100 mt-2" id="timeFilterApply">
+                            <i class="bi bi-check2"></i> Apply
+                        </button>
+                    </div>
+                </div>
+
                 <span class="refresh-indicator text-white-50" id="lastUpdate">Loading...</span>
             </div>
         </div>
@@ -132,6 +182,11 @@
                 <button class="sidebar-item" data-section="churnanalytics">
                     <span class="sidebar-icon"><i class="bi bi-person-x"></i></span>
                     <span class="sidebar-text">Churn Analytics</span>
+                </button>
+
+                <button class="sidebar-item" data-section="categoriesoverview">
+                    <span class="sidebar-icon"><i class="bi bi-pie-chart"></i></span>
+                    <span class="sidebar-text">Categories</span>
                 </button>
 
                 <div class="sidebar-divider"></div>
@@ -421,21 +476,13 @@
             <!-- CHURN ANALYTICS SECTION -->
             <!-- ============================== -->
             <section class="content-section" data-section="churnanalytics">
-                <!-- Time Filter -->
-                <div class="d-flex justify-content-end mb-3">
-                    <div class="input-group" style="width: auto;">
-                        <span class="input-group-text">Days</span>
-                        <input type="number" class="form-control form-control-sm" id="churnDaysFilter" value="180" min="1" max="365" style="width: 80px;">
-                        <button class="btn btn-sm btn-search-nav" onclick="reloadChurnAnalytics()">Apply</button>
-                    </div>
-                </div>
                 <!-- Churn KPI Cards -->
                 <div class="row mb-4">
                     <div class="col-md-3">
                         <div class="card text-center">
                             <div class="card-body">
                                 <div class="stat-value text-primary" id="churnTotalPredictions">-</div>
-                                <div class="stat-label">Total Predictions (70+) <small class="text-muted" id="churnDaysLabel"></small></div>
+                                <div class="stat-label">Total Predictions (70+)</div>
                             </div>
                         </div>
                     </div>
@@ -525,13 +572,8 @@
                 <div class="row mb-4">
                     <div class="col-12">
                         <div class="card">
-                            <div class="card-header d-flex justify-content-between align-items-center">
+                            <div class="card-header">
                                 <span>Churn Risk Trend Over Time</span>
-                                <select id="churnTrendDays" class="form-select form-select-sm" style="width: auto;">
-                                    <option value="7">Last 7 Days</option>
-                                    <option value="30" selected>Last 30 Days</option>
-                                    <option value="90">Last 90 Days</option>
-                                </select>
                             </div>
                             <div class="card-body">
                                 <div class="chart-container" style="height: 300px;">
@@ -603,6 +645,101 @@
                     </div>
                 </div>
             </section><!-- End Churn Analytics Section -->
+
+            <!-- ============================== -->
+            <!-- CATEGORIES OVERVIEW SECTION -->
+            <!-- ============================== -->
+            <section class="content-section" data-section="categoriesoverview">
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Categories Overview</h4>
+                    <div class="d-flex align-items-center gap-2">
+                        <select class="form-select form-select-sm" id="categoriesOverviewDays" style="width: auto;">
+                            <option value="1" selected>Last 24 Hours</option>
+                            <option value="7">Last 7 Days</option>
+                            <option value="30">Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                        </select>
+                        <button class="btn btn-sm btn-outline-primary" onclick="loadCategoriesOverview()">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- KPI Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-primary" id="catTotalConversations">-</div>
+                                <div class="stat-label">Total Conversations</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-success" id="catTotalCategories">-</div>
+                                <div class="stat-label">Unique Categories</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value text-warning" id="catTopCategory">-</div>
+                                <div class="stat-label">Top Category</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <div class="stat-value" id="catAvgPerConversation">-</div>
+                                <div class="stat-label">Avg Categories/Call</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Chart Row -->
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-header py-2">
+                                <i class="bi bi-pie-chart-fill me-2"></i>All Categories Distribution
+                                <span class="badge bg-secondary ms-2" id="catChartTotal">0</span>
+                            </div>
+                            <div class="card-body">
+                                <!-- BIG Chart Container -->
+                                <div class="chart-container clickable-chart" style="height: 500px;">
+                                    <canvas id="categoriesOverviewChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header py-2">
+                                <i class="bi bi-list-ol me-2"></i>Categories Ranking
+                            </div>
+                            <div class="card-body p-0" style="max-height: 540px; overflow-y: auto;">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead class="sticky-top bg-light">
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Category</th>
+                                            <th class="text-end">Count</th>
+                                            <th class="text-end">%</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="categoriesRankingTable"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section><!-- End Categories Overview Section -->
 
             <!-- ============================== -->
             <!-- ALERTS SECTION -->
@@ -1173,6 +1310,7 @@
     <script src="/static/js/churn-analytics.js"></script>
     <script src="/static/js/alerts.js"></script>
     <script src="/static/js/new-features.js"></script>
+    <script src="/static/js/categories-overview.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

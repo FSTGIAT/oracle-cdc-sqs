@@ -4,7 +4,7 @@ Churn Analytics Routes - Accuracy, by-product, by-score-range, trend, high-risk-
 
 from math import ceil
 from flask import Blueprint, jsonify, request
-from . import execute_query, execute_single
+from . import execute_query, execute_single, build_call_type_filter
 
 churn_bp = Blueprint('churn', __name__)
 
@@ -13,24 +13,29 @@ churn_bp = Blueprint('churn', __name__)
 def api_churn_accuracy():
     """Get churn prediction accuracy stats for score >= 70"""
     days = request.args.get('days', 180, type=int)
+    call_type = request.args.get('call_type', 'service')
+
+    call_type_filter = build_call_type_filter(call_type, 'cs')
 
     # Query 1: Total predictions
-    total_query = """
+    total_query = f"""
         SELECT COUNT(*) as total_predictions
-        FROM CONVERSATION_SUMMARY
-        WHERE CHURN_SCORE >= 70
-        AND CONVERSATION_TIME > SYSDATE - :days
+        FROM CONVERSATION_SUMMARY cs
+        WHERE cs.CHURN_SCORE >= 70
+        AND cs.CONVERSATION_TIME > SYSDATE - :days
+        {call_type_filter}
     """
 
     # Query 2: Actual churns - use || ' ' for type conversion
-    actual_query = """
+    actual_query = f"""
         SELECT COUNT(*) as actual_churns
         FROM SUBSCRIBER a
         WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
-            SELECT SUBSCRIBER_NO || ' ', BAN
-            FROM CONVERSATION_SUMMARY
-            WHERE CHURN_SCORE >= 70
-            AND CONVERSATION_TIME > SYSDATE - :days
+            SELECT cs.SUBSCRIBER_NO || ' ', cs.BAN
+            FROM CONVERSATION_SUMMARY cs
+            WHERE cs.CHURN_SCORE >= 70
+            AND cs.CONVERSATION_TIME > SYSDATE - :days
+            {call_type_filter}
         ) AND a.SUB_STATUS = 'C'
     """
 
@@ -53,15 +58,19 @@ def api_churn_accuracy():
 def api_churn_by_product():
     """Get churn breakdown by product code"""
     days = request.args.get('days', 180, type=int)
+    call_type = request.args.get('call_type', 'service')
 
-    query = """
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
         SELECT a.PRODUCT_CODE, COUNT(*) as count
         FROM SUBSCRIBER a
         WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
-            SELECT SUBSCRIBER_NO || ' ', BAN
-            FROM CONVERSATION_SUMMARY
-            WHERE CHURN_SCORE >= 70
-            AND CONVERSATION_TIME > SYSDATE - :days
+            SELECT cs.SUBSCRIBER_NO || ' ', cs.BAN
+            FROM CONVERSATION_SUMMARY cs
+            WHERE cs.CHURN_SCORE >= 70
+            AND cs.CONVERSATION_TIME > SYSDATE - :days
+            {call_type_filter}
         ) AND a.SUB_STATUS = 'C'
         GROUP BY a.PRODUCT_CODE
         ORDER BY count DESC
@@ -74,6 +83,9 @@ def api_churn_by_product():
 def api_churn_by_score_range():
     """Get churn analysis by score ranges (90-100, 70-90, 40-70, 0-40)"""
     days = request.args.get('days', 180, type=int)
+    call_type = request.args.get('call_type', 'service')
+
+    call_type_filter = build_call_type_filter(call_type, 'cs')
 
     ranges = [
         {'label': '90-100 (Critical)', 'min': 90, 'max': 100},
@@ -85,24 +97,26 @@ def api_churn_by_score_range():
     results = []
     for r in ranges:
         # Total predictions in this range
-        pred_query = """
+        pred_query = f"""
             SELECT COUNT(*) as count
-            FROM CONVERSATION_SUMMARY
-            WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
-            AND CONVERSATION_TIME > SYSDATE - :days
+            FROM CONVERSATION_SUMMARY cs
+            WHERE cs.CHURN_SCORE >= :min_score AND cs.CHURN_SCORE <= :max_score
+            AND cs.CONVERSATION_TIME > SYSDATE - :days
+            {call_type_filter}
         """
         pred = execute_single(pred_query, {'min_score': r['min'], 'max_score': r['max'], 'days': days})
         predictions = pred.get('count', 0) or 0
 
         # Count churned - use || ' ' for type conversion
-        churn_query = """
+        churn_query = f"""
             SELECT COUNT(*) as count
             FROM SUBSCRIBER a
             WHERE (a.SUBSCRIBER_NO, a.CUSTOMER_BAN) IN (
-                SELECT SUBSCRIBER_NO || ' ', BAN
-                FROM CONVERSATION_SUMMARY
-                WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
-                AND CONVERSATION_TIME > SYSDATE - :days
+                SELECT cs.SUBSCRIBER_NO || ' ', cs.BAN
+                FROM CONVERSATION_SUMMARY cs
+                WHERE cs.CHURN_SCORE >= :min_score AND cs.CHURN_SCORE <= :max_score
+                AND cs.CONVERSATION_TIME > SYSDATE - :days
+                {call_type_filter}
             )
             AND a.SUB_STATUS = 'C'
         """
@@ -114,6 +128,8 @@ def api_churn_by_score_range():
         results.append({
             'label': r['label'],
             'range': f"{r['min']}-{r['max']}",
+            'min_score': r['min'],
+            'max_score': r['max'],
             'predictions': predictions,
             'actual_churns': actual_churns,
             'accuracy': accuracy,
@@ -127,19 +143,23 @@ def api_churn_by_score_range():
 def api_churn_trend():
     """Get churn score trend over time (daily breakdown by risk level)"""
     days = request.args.get('days', 30, type=int)
+    call_type = request.args.get('call_type', 'service')
 
-    query = """
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
         SELECT
-            TO_CHAR(TRUNC(CONVERSATION_TIME), 'YYYY-MM-DD') as call_date,
+            TO_CHAR(TRUNC(cs.CONVERSATION_TIME), 'YYYY-MM-DD') as call_date,
             COUNT(*) as total_calls,
-            COUNT(CASE WHEN CHURN_SCORE >= 70 THEN 1 END) as high_risk,
-            COUNT(CASE WHEN CHURN_SCORE >= 40 AND CHURN_SCORE < 70 THEN 1 END) as medium_risk,
-            COUNT(CASE WHEN CHURN_SCORE < 40 OR CHURN_SCORE IS NULL THEN 1 END) as low_risk,
-            ROUND(AVG(CHURN_SCORE), 1) as avg_score
-        FROM CONVERSATION_SUMMARY
-        WHERE CONVERSATION_TIME > SYSDATE - :days
-        GROUP BY TRUNC(CONVERSATION_TIME)
-        ORDER BY TRUNC(CONVERSATION_TIME)
+            COUNT(CASE WHEN cs.CHURN_SCORE >= 70 THEN 1 END) as high_risk,
+            COUNT(CASE WHEN cs.CHURN_SCORE >= 40 AND cs.CHURN_SCORE < 70 THEN 1 END) as medium_risk,
+            COUNT(CASE WHEN cs.CHURN_SCORE < 40 OR cs.CHURN_SCORE IS NULL THEN 1 END) as low_risk,
+            ROUND(AVG(cs.CHURN_SCORE), 1) as avg_score
+        FROM CONVERSATION_SUMMARY cs
+        WHERE cs.CONVERSATION_TIME > SYSDATE - :days
+        {call_type_filter}
+        GROUP BY TRUNC(cs.CONVERSATION_TIME)
+        ORDER BY TRUNC(cs.CONVERSATION_TIME)
     """
 
     results = execute_query(query, {'days': days})
@@ -154,12 +174,16 @@ def api_high_risk_calls():
     max_score = request.args.get('max_score', 100, type=int)
     offset = request.args.get('offset', 0, type=int)
     limit = request.args.get('limit', 25, type=int)
+    call_type = request.args.get('call_type', 'service')
+
+    call_type_filter = build_call_type_filter(call_type, 'cs')
 
     # Get total count for pagination
-    count_query = """
-        SELECT COUNT(*) as total FROM CONVERSATION_SUMMARY
-        WHERE CHURN_SCORE >= :min_score AND CHURN_SCORE <= :max_score
-        AND CONVERSATION_TIME > SYSDATE - :days
+    count_query = f"""
+        SELECT COUNT(*) as total FROM CONVERSATION_SUMMARY cs
+        WHERE cs.CHURN_SCORE >= :min_score AND cs.CHURN_SCORE <= :max_score
+        AND cs.CONVERSATION_TIME > SYSDATE - :days
+        {call_type_filter}
     """
     count_result = execute_single(count_query, {
         'min_score': min_score, 'max_score': max_score, 'days': days
@@ -167,7 +191,7 @@ def api_high_risk_calls():
     total = count_result.get('total', 0) or 0
 
     # Single query with LEFT JOIN - no loop, uses || '' pattern
-    calls_query = """
+    calls_query = f"""
         SELECT
             cs.SOURCE_ID as call_id,
             cs.SOURCE_TYPE as type,
@@ -184,6 +208,7 @@ def api_high_risk_calls():
             AND s.CUSTOMER_BAN = cs.BAN
         WHERE cs.CHURN_SCORE >= :min_score AND cs.CHURN_SCORE <= :max_score
         AND cs.CONVERSATION_TIME > SYSDATE - :days
+        {call_type_filter}
         ORDER BY cs.CHURN_SCORE DESC, cs.CONVERSATION_TIME DESC
         OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
     """
@@ -202,3 +227,42 @@ def api_high_risk_calls():
         'limit': limit,
         'pages': ceil(total / limit) if limit > 0 else 1
     })
+
+
+@churn_bp.route('/by-score-range/calls')
+def api_churn_by_score_range_calls():
+    """Get calls for a specific score range (drill-down from score range breakdown)"""
+    days = request.args.get('days', 180, type=int)
+    min_score = request.args.get('min_score', 0, type=int)
+    max_score = request.args.get('max_score', 100, type=int)
+    limit = request.args.get('limit', 50, type=int)
+    call_type = request.args.get('call_type', 'service')
+
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
+        SELECT
+            cs.SOURCE_ID as call_id,
+            cs.SOURCE_TYPE as type,
+            TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
+            cs.SUMMARY as summary,
+            cs.SENTIMENT as sentiment,
+            cs.SATISFACTION as satisfaction,
+            ROUND(cs.CHURN_SCORE, 1) as churn_score,
+            cs.PRODUCTS as products,
+            cs.ACTION_ITEMS as action_items
+        FROM CONVERSATION_SUMMARY cs
+        WHERE cs.CHURN_SCORE >= :min_score AND cs.CHURN_SCORE <= :max_score
+        AND cs.CONVERSATION_TIME > SYSDATE - :days
+        {call_type_filter}
+        ORDER BY cs.CHURN_SCORE DESC, cs.CONVERSATION_TIME DESC
+        FETCH FIRST :limit ROWS ONLY
+    """
+
+    results = execute_query(query, {
+        'min_score': min_score,
+        'max_score': max_score,
+        'days': days,
+        'limit': limit
+    })
+    return jsonify(results)
