@@ -600,8 +600,54 @@ async function loadRepeatCallers() {
 
         renderRepeatCallersChart(data, ctx);
 
+        // Load top callers (7+)
+        loadTopRepeatCallers();
+
     } catch (error) {
         console.error('Error loading repeat callers:', error);
+    }
+}
+
+async function loadTopRepeatCallers() {
+    try {
+        const callType = getCallType();
+        const response = await fetch(`${API_BASE}/api/repeat-callers/top?call_type=${callType}`);
+        const data = await response.json();
+
+        const customers = data.customers || [];
+        const tbody = document.getElementById('topRepeatCallersTable');
+        const badge = document.getElementById('topCallersCount');
+
+        if (badge) {
+            if (customers.length > 0) {
+                badge.textContent = customers.length;
+                badge.style.display = 'inline';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        if (tbody) {
+            if (customers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No callers with 7+ calls</td></tr>';
+            } else {
+                tbody.innerHTML = customers.map(c => {
+                    const subscriberNo = escapeHtml(String(c.subscriber_no || ''));
+                    const ban = escapeHtml(String(c.ban || ''));
+                    return `
+                        <tr onclick="showCustomerJourney('${subscriberNo}', '${ban}')" style="cursor: pointer;">
+                            <td>${subscriberNo || '-'}</td>
+                            <td>${ban || '-'}</td>
+                            <td class="text-end fw-bold">${c.call_count}</td>
+                            <td>${getChurnBadge(c.max_churn_score)}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+    } catch (error) {
+        console.error('Error loading top repeat callers:', error);
     }
 }
 
@@ -666,12 +712,13 @@ function renderRepeatCallersChart(data, ctx) {
                 if (elements.length > 0) {
                     const index = elements[0].index;
                     const bucket = buckets[index];
-                    // Determine min/max calls for this bucket
+                    // Determine min/max calls based on bucket label
                     let minCalls, maxCalls;
-                    if (index === 0) { minCalls = 1; maxCalls = 1; }
-                    else if (index === 1) { minCalls = 2; maxCalls = 2; }
-                    else if (index === 2) { minCalls = 3; maxCalls = 3; }
-                    else { minCalls = 4; maxCalls = 999; }
+                    if (bucket.label === '2 calls') { minCalls = 2; maxCalls = 2; }
+                    else if (bucket.label === '3 calls') { minCalls = 3; maxCalls = 3; }
+                    else if (bucket.label === '4 calls') { minCalls = 4; maxCalls = 4; }
+                    else if (bucket.label === '5 calls') { minCalls = 5; maxCalls = 5; }
+                    else { minCalls = 6; maxCalls = 999; }  // 6+ calls
                     showRepeatCallerSubscribers(bucket.label, minCalls, maxCalls);
                 }
             },

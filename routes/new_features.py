@@ -799,20 +799,23 @@ def api_repeat_callers():
             AND TRIM(cs.SUBSCRIBER_NO) IS NOT NULL
             {call_type_filter}
             GROUP BY cs.SUBSCRIBER_NO, cs.BAN
+            HAVING COUNT(*) >= 2
         ),
         bucketed AS (
             SELECT
                 CASE
-                    WHEN call_count = 1 THEN 1
-                    WHEN call_count = 2 THEN 2
-                    WHEN call_count = 3 THEN 3
-                    ELSE 4
+                    WHEN call_count = 2 THEN 1
+                    WHEN call_count = 3 THEN 2
+                    WHEN call_count = 4 THEN 3
+                    WHEN call_count = 5 THEN 4
+                    ELSE 5
                 END as bucket_order,
                 CASE
-                    WHEN call_count = 1 THEN '1 call'
                     WHEN call_count = 2 THEN '2 calls'
                     WHEN call_count = 3 THEN '3 calls'
-                    ELSE '4+ calls'
+                    WHEN call_count = 4 THEN '4 calls'
+                    WHEN call_count = 5 THEN '5 calls'
+                    ELSE '6+ calls'
                 END as frequency_bucket,
                 max_churn_score
             FROM caller_counts
@@ -829,12 +832,13 @@ def api_repeat_callers():
     results = execute_query(query, {'days': days})
 
     # Ensure all buckets exist (even with 0 count)
-    bucket_map = {'1 call': 0, '2 calls': 1, '3 calls': 2, '4+ calls': 3}
+    bucket_map = {'2 calls': 0, '3 calls': 1, '4 calls': 2, '5 calls': 3, '6+ calls': 4}
     buckets = [
-        {'label': '1 call', 'count': 0, 'high_risk': 0},
         {'label': '2 calls', 'count': 0, 'high_risk': 0},
         {'label': '3 calls', 'count': 0, 'high_risk': 0},
-        {'label': '4+ calls', 'count': 0, 'high_risk': 0}
+        {'label': '4 calls', 'count': 0, 'high_risk': 0},
+        {'label': '5 calls', 'count': 0, 'high_risk': 0},
+        {'label': '6+ calls', 'count': 0, 'high_risk': 0}
     ]
 
     total_subscribers = 0
@@ -919,6 +923,56 @@ def api_repeat_callers_subscribers():
     return jsonify({
         'subscribers': subscribers,
         'count': len(subscribers)
+    })
+
+
+# ========================================
+# 8. TOP REPEAT CALLERS (7+ calls in 24h)
+# ========================================
+
+@new_features_bp.route('/repeat-callers/top')
+def api_repeat_callers_top():
+    """
+    Get customers who called 7+ times in last 24h.
+    Always uses fixed 24h window.
+    """
+    days = 1  # Fixed 24 hours
+    call_type = request.args.get('call_type', 'service')
+    limit = request.args.get('limit', 10, type=int)
+
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
+        SELECT
+            cs.SUBSCRIBER_NO as subscriber_no,
+            cs.BAN as ban,
+            COUNT(*) as call_count,
+            MAX(cs.CHURN_SCORE) as max_churn_score,
+            MAX(TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI')) as last_call
+        FROM CONVERSATION_SUMMARY cs
+        WHERE cs.CONVERSATION_TIME > SYSDATE - :days
+        AND cs.SUBSCRIBER_NO IS NOT NULL
+        AND TRIM(cs.SUBSCRIBER_NO) IS NOT NULL
+        {call_type_filter}
+        GROUP BY cs.SUBSCRIBER_NO, cs.BAN
+        HAVING COUNT(*) >= 7
+        ORDER BY COUNT(*) DESC
+        FETCH FIRST :limit ROWS ONLY
+    """
+
+    results = execute_query(query, {'days': days, 'limit': limit})
+
+    customers = [{
+        'subscriber_no': row.get('subscriber_no', ''),
+        'ban': row.get('ban', ''),
+        'call_count': row.get('call_count', 0),
+        'max_churn_score': row.get('max_churn_score'),
+        'last_call': row.get('last_call', '')
+    } for row in results]
+
+    return jsonify({
+        'customers': customers,
+        'count': len(customers)
     })
 
 

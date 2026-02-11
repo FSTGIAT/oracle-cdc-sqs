@@ -363,8 +363,28 @@
                                 <span class="badge bg-danger" id="repeatCallersRiskBadge" style="display: none;">0 high risk</span>
                             </div>
                             <div class="card-body p-2">
-                                <div class="chart-container" style="height: 220px;">
+                                <div class="chart-container" style="height: 140px;">
                                     <canvas id="repeatCallersChart"></canvas>
+                                </div>
+                                <!-- Top Callers Table (7+) -->
+                                <div class="mt-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="small fw-bold text-muted">Top Callers (7+)</span>
+                                        <span class="badge bg-warning text-dark" id="topCallersCount" style="display: none;">0</span>
+                                    </div>
+                                    <div class="table-responsive" style="max-height: 90px; overflow-y: auto;">
+                                        <table class="table table-sm table-hover mb-0 small">
+                                            <thead class="sticky-top bg-light">
+                                                <tr>
+                                                    <th>Subscriber</th>
+                                                    <th>BAN</th>
+                                                    <th class="text-end">Calls</th>
+                                                    <th>Churn</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="topRepeatCallersTable"></tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </div>
