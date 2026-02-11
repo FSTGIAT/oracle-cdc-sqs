@@ -322,7 +322,36 @@
                     </div>
                 </div>
 
-                <!-- Row 3: Agent Performance and Products -->
+                <!-- Row 3: Queue Distribution and Repeat Callers -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-diagram-3"></i> Queue Distribution</span>
+                            </div>
+                            <div class="card-body p-2">
+                                <div class="chart-container" style="height: 280px;">
+                                    <canvas id="queueDistributionChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-people"></i> Repeat Callers (Last 24h)</span>
+                                <span class="badge bg-danger" id="repeatCallersRiskBadge" style="display: none;">0 high risk</span>
+                            </div>
+                            <div class="card-body p-2">
+                                <div class="chart-container" style="height: 280px;">
+                                    <canvas id="repeatCallersChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 4: Agent Performance and Products -->
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <div class="card">
@@ -351,7 +380,7 @@
                     </div>
                 </div>
 
-                <!-- Row 4: Recent Conversations Table -->
+                <!-- Row 5: Recent Conversations Table -->
                 <div class="row">
                     <div class="col-12">
                         <div class="card">

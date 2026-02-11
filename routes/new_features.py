@@ -678,6 +678,250 @@ def api_customer_lookup():
 
 
 # ========================================
+# 6. QUEUE DISTRIBUTION (by QUEUE_NAME)
+# ========================================
+
+@new_features_bp.route('/queue-distribution')
+def api_queue_distribution():
+    """
+    Group calls by QUEUE_NAME from VERINT_TEXT_ANALYSIS.
+    Returns queue names with call counts and avg metrics.
+    """
+    days = request.args.get('days', 1, type=float)
+    call_type = request.args.get('call_type', 'service')
+    limit = request.args.get('limit', 15, type=int)
+
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
+        SELECT
+            v.QUEUE_NAME as queue_name,
+            COUNT(DISTINCT v.CALL_ID) as call_count,
+            ROUND(AVG(cs.SATISFACTION), 1) as avg_satisfaction,
+            ROUND(AVG(cs.CHURN_SCORE), 0) as avg_churn_score
+        FROM VERINT_TEXT_ANALYSIS v
+        LEFT JOIN CONVERSATION_SUMMARY cs ON v.CALL_ID = cs.SOURCE_ID
+        WHERE v.CALL_TIME > SYSDATE - :days
+        AND v.QUEUE_NAME IS NOT NULL
+        AND TRIM(v.QUEUE_NAME) IS NOT NULL
+        {call_type_filter}
+        GROUP BY v.QUEUE_NAME
+        ORDER BY call_count DESC
+        FETCH FIRST :limit ROWS ONLY
+    """
+
+    results = execute_query(query, {'days': days, 'limit': limit})
+
+    queues = [{
+        'queue_name': row.get('queue_name', ''),
+        'call_count': row.get('call_count', 0) or 0,
+        'avg_satisfaction': row.get('avg_satisfaction'),
+        'avg_churn_score': row.get('avg_churn_score') or 0
+    } for row in results]
+
+    return jsonify({
+        'queues': queues,
+        'days': days
+    })
+
+
+@new_features_bp.route('/queue-distribution/calls')
+def api_queue_distribution_calls():
+    """
+    Get calls for a specific queue (drill-down from queue distribution chart).
+    """
+    queue_name = request.args.get('queue_name', '')
+    days = request.args.get('days', 1, type=float)
+    limit = request.args.get('limit', 100, type=int)
+    call_type = request.args.get('call_type', 'service')
+
+    if not queue_name:
+        return jsonify([])
+
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
+        SELECT
+            cs.SOURCE_ID as call_id,
+            cs.SOURCE_TYPE as type,
+            TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI') as created,
+            cs.SENTIMENT as sentiment,
+            cs.SATISFACTION as satisfaction,
+            ROUND(cs.CHURN_SCORE, 1) as churn_score,
+            cs.SUMMARY as summary
+        FROM CONVERSATION_SUMMARY cs
+        WHERE cs.SOURCE_ID IN (
+            SELECT DISTINCT v.CALL_ID
+            FROM VERINT_TEXT_ANALYSIS v
+            WHERE v.QUEUE_NAME = :queue_name
+            AND v.CALL_TIME > SYSDATE - :days
+        )
+        {call_type_filter}
+        ORDER BY cs.CONVERSATION_TIME DESC
+        FETCH FIRST :limit ROWS ONLY
+    """
+
+    results = execute_query(query, {
+        'queue_name': queue_name,
+        'days': days,
+        'limit': limit
+    })
+
+    return jsonify(results if results else [])
+
+
+# ========================================
+# 7. REPEAT CALLERS (subscribers calling multiple times)
+# ========================================
+
+@new_features_bp.route('/repeat-callers')
+def api_repeat_callers():
+    """
+    Get subscribers grouped by call frequency in last 24h.
+    Always uses fixed 24h window regardless of global time filter.
+    """
+    days = 1  # Fixed 24 hours
+    call_type = request.args.get('call_type', 'service')
+
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+
+    query = f"""
+        WITH caller_counts AS (
+            SELECT
+                cs.SUBSCRIBER_NO,
+                cs.BAN,
+                COUNT(*) as call_count,
+                MAX(cs.CHURN_SCORE) as max_churn_score,
+                MAX(cs.CONVERSATION_TIME) as last_call
+            FROM CONVERSATION_SUMMARY cs
+            WHERE cs.CONVERSATION_TIME > SYSDATE - :days
+            AND cs.SUBSCRIBER_NO IS NOT NULL
+            AND TRIM(cs.SUBSCRIBER_NO) IS NOT NULL
+            {call_type_filter}
+            GROUP BY cs.SUBSCRIBER_NO, cs.BAN
+        )
+        SELECT
+            CASE
+                WHEN call_count = 1 THEN '1 call'
+                WHEN call_count = 2 THEN '2 calls'
+                WHEN call_count = 3 THEN '3 calls'
+                ELSE '4+ calls'
+            END as frequency_bucket,
+            COUNT(*) as subscriber_count,
+            SUM(CASE WHEN max_churn_score >= 70 THEN 1 ELSE 0 END) as high_risk_count
+        FROM caller_counts
+        GROUP BY CASE
+            WHEN call_count = 1 THEN '1 call'
+            WHEN call_count = 2 THEN '2 calls'
+            WHEN call_count = 3 THEN '3 calls'
+            ELSE '4+ calls'
+        END
+        ORDER BY
+            CASE
+                WHEN call_count = 1 THEN 1
+                WHEN call_count = 2 THEN 2
+                WHEN call_count = 3 THEN 3
+                ELSE 4
+            END
+    """
+
+    results = execute_query(query, {'days': days})
+
+    # Ensure all buckets exist (even with 0 count)
+    bucket_map = {'1 call': 0, '2 calls': 1, '3 calls': 2, '4+ calls': 3}
+    buckets = [
+        {'label': '1 call', 'count': 0, 'high_risk': 0},
+        {'label': '2 calls', 'count': 0, 'high_risk': 0},
+        {'label': '3 calls', 'count': 0, 'high_risk': 0},
+        {'label': '4+ calls', 'count': 0, 'high_risk': 0}
+    ]
+
+    total_subscribers = 0
+    total_high_risk = 0
+
+    for row in results:
+        label = row.get('frequency_bucket', '')
+        if label in bucket_map:
+            idx = bucket_map[label]
+            count = row.get('subscriber_count', 0) or 0
+            high_risk = row.get('high_risk_count', 0) or 0
+            buckets[idx]['count'] = count
+            buckets[idx]['high_risk'] = high_risk
+            total_subscribers += count
+            total_high_risk += high_risk
+
+    return jsonify({
+        'buckets': buckets,
+        'total_subscribers': total_subscribers,
+        'total_high_risk': total_high_risk
+    })
+
+
+@new_features_bp.route('/repeat-callers/subscribers')
+def api_repeat_callers_subscribers():
+    """
+    Get subscribers for a specific frequency bucket (drill-down).
+    """
+    min_calls = request.args.get('min_calls', 1, type=int)
+    max_calls = request.args.get('max_calls', 999, type=int)
+    days = 1  # Fixed 24 hours
+    call_type = request.args.get('call_type', 'service')
+    high_risk_only = request.args.get('high_risk_only', 'false') == 'true'
+    limit = request.args.get('limit', 100, type=int)
+
+    call_type_filter = build_call_type_filter(call_type, 'cs')
+    high_risk_filter = "AND max_churn_score >= 70" if high_risk_only else ""
+
+    query = f"""
+        WITH caller_counts AS (
+            SELECT
+                cs.SUBSCRIBER_NO,
+                cs.BAN,
+                COUNT(*) as call_count,
+                MAX(cs.CHURN_SCORE) as max_churn_score,
+                MAX(TO_CHAR(cs.CONVERSATION_TIME, 'YYYY-MM-DD HH24:MI')) as last_call
+            FROM CONVERSATION_SUMMARY cs
+            WHERE cs.CONVERSATION_TIME > SYSDATE - :days
+            AND cs.SUBSCRIBER_NO IS NOT NULL
+            AND TRIM(cs.SUBSCRIBER_NO) IS NOT NULL
+            {call_type_filter}
+            GROUP BY cs.SUBSCRIBER_NO, cs.BAN
+            HAVING COUNT(*) >= :min_calls AND COUNT(*) <= :max_calls
+        )
+        SELECT
+            SUBSCRIBER_NO as subscriber_no,
+            BAN as ban,
+            call_count,
+            max_churn_score,
+            last_call
+        FROM caller_counts
+        WHERE 1=1 {high_risk_filter}
+        ORDER BY call_count DESC, max_churn_score DESC NULLS LAST
+        FETCH FIRST :limit ROWS ONLY
+    """
+
+    results = execute_query(query, {
+        'days': days,
+        'min_calls': min_calls,
+        'max_calls': max_calls,
+        'limit': limit
+    })
+
+    subscribers = [{
+        'subscriber_no': row.get('subscriber_no', ''),
+        'ban': row.get('ban', ''),
+        'call_count': row.get('call_count', 0),
+        'max_churn_score': row.get('max_churn_score'),
+        'last_call': row.get('last_call', '')
+    } for row in results]
+
+    return jsonify({
+        'subscribers': subscribers,
+        'count': len(subscribers)
+    })
+
+
+# ========================================
 # HEALTH CHECK
 # ========================================
 
