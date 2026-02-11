@@ -394,8 +394,24 @@ async function drillDownAgentPerformance(queueName) {
 }
 
 // ========================================
-// QUEUE DISTRIBUTION
+// QUEUE DISTRIBUTION (Donut + Table)
 // ========================================
+
+// Soft color palette for queue distribution
+const queueColors = [
+    'rgba(99, 179, 237, 0.8)',   // Sky blue
+    'rgba(52, 211, 153, 0.8)',   // Teal
+    'rgba(251, 191, 36, 0.8)',   // Amber
+    'rgba(167, 139, 250, 0.8)',  // Purple
+    'rgba(245, 101, 101, 0.8)', // Coral
+    'rgba(34, 197, 94, 0.8)',    // Green
+    'rgba(249, 115, 22, 0.8)',   // Orange
+    'rgba(139, 92, 246, 0.8)',   // Violet
+    'rgba(236, 72, 153, 0.8)',   // Pink
+    'rgba(20, 184, 166, 0.8)',   // Cyan
+    'rgba(132, 204, 22, 0.8)',   // Lime
+    'rgba(244, 63, 94, 0.8)',    // Rose
+];
 
 async function loadQueueDistribution() {
     const ctx = document.getElementById('queueDistributionChart');
@@ -408,7 +424,13 @@ async function loadQueueDistribution() {
         const data = await response.json();
 
         queueDistributionData = data.queues || [];
+
+        // Update badge
+        const badge = document.getElementById('queueChartTotal');
+        if (badge) badge.textContent = queueDistributionData.length;
+
         renderQueueDistributionChart(queueDistributionData, ctx);
+        updateQueueRankingTable(queueDistributionData);
 
     } catch (error) {
         console.error('Error loading queue distribution:', error);
@@ -429,38 +451,23 @@ function renderQueueDistributionChart(queues, ctx) {
         return;
     }
 
-    // Soft color palette based on avg_churn_score
-    const getBarColor = (churnScore) => {
-        if (churnScore >= 70) return 'rgba(245, 101, 101, 0.7)';  // Soft coral (high risk)
-        if (churnScore >= 40) return 'rgba(251, 191, 36, 0.7)';   // Soft amber (medium)
-        return 'rgba(52, 211, 153, 0.7)';                         // Soft teal (low risk)
-    };
-
-    const getBorderColor = (churnScore) => {
-        if (churnScore >= 70) return 'rgba(245, 101, 101, 1)';
-        if (churnScore >= 40) return 'rgba(251, 191, 36, 1)';
-        return 'rgba(52, 211, 153, 1)';
-    };
-
     queueDistributionChartInstance = new Chart(ctx, {
-        type: 'bar',
+        type: 'doughnut',
         data: {
             labels: queues.map(q => q.queue_name),
             datasets: [{
-                label: 'Calls',
                 data: queues.map(q => q.call_count),
-                backgroundColor: queues.map(q => getBarColor(q.avg_churn_score)),
-                borderColor: queues.map(q => getBorderColor(q.avg_churn_score)),
-                borderWidth: 1,
-                borderRadius: 4
+                backgroundColor: queues.map((_, i) => queueColors[i % queueColors.length]),
+                borderWidth: 2,
+                borderColor: '#fff'
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            indexAxis: 'y',  // Horizontal bars
+            cutout: '55%',
             plugins: {
-                legend: { display: false },
+                legend: { display: false },  // Use table instead
                 tooltip: {
                     backgroundColor: 'rgba(255, 255, 255, 0.95)',
                     titleColor: '#333',
@@ -470,16 +477,17 @@ function renderQueueDistributionChart(queues, ctx) {
                     cornerRadius: 8,
                     padding: 12,
                     callbacks: {
-                        afterLabel: (context) => {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.raw / total) * 100).toFixed(1);
+                            return `${context.label}: ${context.raw.toLocaleString()} (${percentage}%)`;
+                        },
+                        afterLabel: function(context) {
                             const q = queues[context.dataIndex];
-                            return `Avg Satisfaction: ${q.avg_satisfaction || '-'}\nAvg Churn: ${q.avg_churn_score || '-'}`;
+                            return `Avg Churn: ${q.avg_churn_score || '-'}`;
                         }
                     }
                 }
-            },
-            scales: {
-                x: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
-                y: { grid: { display: false } }
             },
             onClick: (event, elements) => {
                 if (elements.length > 0) {
@@ -492,6 +500,29 @@ function renderQueueDistributionChart(queues, ctx) {
             }
         }
     });
+}
+
+function updateQueueRankingTable(queues) {
+    const total = queues.reduce((sum, q) => sum + (q.call_count || 0), 0);
+    const tbody = document.getElementById('queueRankingTable');
+    if (!tbody) return;
+
+    tbody.innerHTML = queues.map((q, index) => {
+        const percentage = total > 0 ? ((q.call_count / total) * 100).toFixed(1) : 0;
+        const colorDot = queueColors[index % queueColors.length];
+        const escapedQueue = escapeHtml(q.queue_name || 'Unknown');
+        return `
+            <tr class="queue-row" onclick="showQueueCalls('${escapedQueue}')" style="cursor: pointer;">
+                <td>
+                    <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${colorDot}; margin-right: 4px;"></span>
+                    ${index + 1}
+                </td>
+                <td class="text-truncate" style="max-width: 120px;" title="${escapedQueue}">${escapedQueue}</td>
+                <td class="text-end">${(q.call_count || 0).toLocaleString()}</td>
+                <td class="text-end">${percentage}%</td>
+            </tr>
+        `;
+    }).join('');
 }
 
 async function showQueueCalls(queueName) {
