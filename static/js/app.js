@@ -149,7 +149,7 @@ async function fetchData() {
             lastUpdateEl.textContent = 'Updated: ' + new Date().toLocaleTimeString();
         }
 
-        // Load new features data (heatmap, products, agent performance)
+        // Load new features data (heatmap, products, agent performance, queue distribution, repeat callers)
         if (typeof loadHeatmap === 'function') {
             loadHeatmap();
         }
@@ -158,6 +158,12 @@ async function fetchData() {
         }
         if (typeof loadAgentPerformance === 'function') {
             loadAgentPerformance();
+        }
+        if (typeof loadQueueDistribution === 'function') {
+            loadQueueDistribution();
+        }
+        if (typeof loadRepeatCallers === 'function') {
+            loadRepeatCallers();
         }
 
     } catch (error) {
