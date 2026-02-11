@@ -799,30 +799,31 @@ def api_repeat_callers():
             AND TRIM(cs.SUBSCRIBER_NO) IS NOT NULL
             {call_type_filter}
             GROUP BY cs.SUBSCRIBER_NO, cs.BAN
+        ),
+        bucketed AS (
+            SELECT
+                CASE
+                    WHEN call_count = 1 THEN 1
+                    WHEN call_count = 2 THEN 2
+                    WHEN call_count = 3 THEN 3
+                    ELSE 4
+                END as bucket_order,
+                CASE
+                    WHEN call_count = 1 THEN '1 call'
+                    WHEN call_count = 2 THEN '2 calls'
+                    WHEN call_count = 3 THEN '3 calls'
+                    ELSE '4+ calls'
+                END as frequency_bucket,
+                max_churn_score
+            FROM caller_counts
         )
         SELECT
-            CASE
-                WHEN call_count = 1 THEN '1 call'
-                WHEN call_count = 2 THEN '2 calls'
-                WHEN call_count = 3 THEN '3 calls'
-                ELSE '4+ calls'
-            END as frequency_bucket,
+            frequency_bucket,
             COUNT(*) as subscriber_count,
             SUM(CASE WHEN max_churn_score >= 70 THEN 1 ELSE 0 END) as high_risk_count
-        FROM caller_counts
-        GROUP BY CASE
-            WHEN call_count = 1 THEN '1 call'
-            WHEN call_count = 2 THEN '2 calls'
-            WHEN call_count = 3 THEN '3 calls'
-            ELSE '4+ calls'
-        END
-        ORDER BY
-            CASE
-                WHEN call_count = 1 THEN 1
-                WHEN call_count = 2 THEN 2
-                WHEN call_count = 3 THEN 3
-                ELSE 4
-            END
+        FROM bucketed
+        GROUP BY bucket_order, frequency_bucket
+        ORDER BY bucket_order
     """
 
     results = execute_query(query, {'days': days})
