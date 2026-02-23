@@ -109,6 +109,8 @@ def api_churn_by_score_range():
             FROM CONVERSATION_SUMMARY cs
             WHERE cs.CHURN_SCORE >= :min_score AND cs.CHURN_SCORE <= :max_score
             AND cs.CONVERSATION_TIME > SYSDATE - :days
+            AND TO_NUMBER(TO_CHAR(cs.CONVERSATION_TIME, 'HH24')) >= 8
+            AND TO_NUMBER(TO_CHAR(cs.CONVERSATION_TIME, 'HH24')) < 19
             {call_type_filter}
         """
         pred = execute_single(pred_query, {'min_score': r['min'], 'max_score': r['max'], 'days': days})
@@ -123,6 +125,8 @@ def api_churn_by_score_range():
                 FROM CONVERSATION_SUMMARY cs
                 WHERE cs.CHURN_SCORE >= :min_score AND cs.CHURN_SCORE <= :max_score
                 AND cs.CONVERSATION_TIME > SYSDATE - :days
+                AND TO_NUMBER(TO_CHAR(cs.CONVERSATION_TIME, 'HH24')) >= 8
+                AND TO_NUMBER(TO_CHAR(cs.CONVERSATION_TIME, 'HH24')) < 19
                 {call_type_filter}
             )
             AND a.SUB_STATUS = 'C'
@@ -261,6 +265,8 @@ def api_churn_by_score_range_calls():
         FROM CONVERSATION_SUMMARY cs
         WHERE cs.CHURN_SCORE >= :min_score AND cs.CHURN_SCORE <= :max_score
         AND cs.CONVERSATION_TIME > SYSDATE - :days
+        AND TO_NUMBER(TO_CHAR(cs.CONVERSATION_TIME, 'HH24')) >= 8
+        AND TO_NUMBER(TO_CHAR(cs.CONVERSATION_TIME, 'HH24')) < 19
         {call_type_filter}
         ORDER BY cs.CHURN_SCORE DESC, cs.CONVERSATION_TIME DESC
         FETCH FIRST :limit ROWS ONLY
