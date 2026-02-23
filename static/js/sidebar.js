@@ -11,6 +11,7 @@ const sectionCallbacks = {
     'analytics': null,
     'mlquality': null,
     'churnanalytics': null,
+    'categoriesoverview': null,
     'alerts': null
 };
 

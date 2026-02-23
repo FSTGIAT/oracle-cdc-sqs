@@ -74,6 +74,13 @@ async function loadChurnAnalytics() {
 
         // === Score Range Chart (Grouped Bar) ===
         if (churnScoreRangeChartInstance) churnScoreRangeChartInstance.destroy();
+        // Color gradient: green (low risk) → yellow → orange → red (high risk)
+        const predictionColors = ranges.map((_, i) => {
+            const t = i / (ranges.length - 1);
+            if (t < 0.33) return `rgba(40, 167, 69, ${0.5 + t})`;       // green
+            if (t < 0.66) return `rgba(255, 193, 7, ${0.5 + t * 0.5})`; // yellow/orange
+            return `rgba(220, 53, 69, ${0.6 + t * 0.4})`;               // red
+        });
         churnScoreRangeChartInstance = new Chart(document.getElementById('churnScoreRangeChart'), {
             type: 'bar',
             data: {
@@ -82,7 +89,7 @@ async function loadChurnAnalytics() {
                     {
                         label: 'Predictions',
                         data: ranges.map(r => r.predictions),
-                        backgroundColor: '#0d6efd'
+                        backgroundColor: predictionColors
                     },
                     {
                         label: 'Actual Churns',
